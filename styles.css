@@ -219,29 +219,6 @@ button.ghost { background: rgba(255,255,255,0.08); }
   z-index: 5;
 }
 
-.mobile-nav {
-  display: none;
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 72px;
-  padding: 0.5rem 0.6rem;
-  background: rgba(12,16,30,0.95);
-  border-top: 1px solid rgba(255,255,255,0.08);
-  backdrop-filter: blur(8px);
-  z-index: 7;
-  overflow-x: auto;
-  gap: 0.4rem;
-}
-.mobile-nav button {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-.mobile-nav button.active {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
 .mobile-combat-bar {
   display: none;
   position: fixed;
@@ -286,7 +263,6 @@ button.ghost { background: rgba(255,255,255,0.08); }
   .nav-overlay.show { display: block; }
   .main { padding: 0.75rem; margin-left: 0; }
   .top-panel { grid-template-columns: 1fr; }
-  .mobile-nav { display: flex; }
   .mobile-combat-bar { display: flex; }
   .combat-actions .buttons-grid { display: none; }
   .combat-row { display: none; }
