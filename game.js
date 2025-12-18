@@ -124,8 +124,6 @@ const Utils = {
   chance(percent) { return Math.random() * 100 < percent; },
 };
 
-const COOLDOWN_MOD = 1.2;
-
 const initialState = () => {
   const className = 'Warrior';
   const cls = GameData.classes[className];
@@ -164,10 +162,7 @@ const UI = (() => {
   const overlay = document.getElementById('navOverlay');
   const sidebar = document.getElementById('sidebar');
   const hamburger = document.getElementById('hamburger');
-  const hamburgerGlobal = document.getElementById('hamburgerGlobal');
   const mobileBar = document.getElementById('mobileCombatBar');
-  const mobileNav = document.getElementById('mobileNav');
-  const navToggle = document.getElementById('mobileNavToggle');
 
   const addLog = (text) => {
     state.log.unshift({ text, time: Date.now() });
@@ -179,8 +174,6 @@ const UI = (() => {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === id));
-    highlightMobileNav(id);
-    if (window.innerWidth <= 768) closeNav();
     closeNav();
   };
 
@@ -220,51 +213,20 @@ const UI = (() => {
     });
   };
 
-  const syncMobileButtons = () => {
-    mobileBar.querySelectorAll('button').forEach(btn => {
-      const targetId = btn.id.replace('-mobile','');
-      const target = document.getElementById(targetId);
-      if (target) btn.disabled = target.disabled;
-    });
-  };
-
-  const buildMobileNav = () => {
-    mobileNav.innerHTML = '';
-    const navTargets = ['combat','zones','inventory','skillTrees','lifeSkills','dragons','shop','settings'];
-    navTargets.forEach(tabId => {
-      const btn = document.createElement('button');
-      const src = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
-      btn.textContent = src ? src.textContent : tabId;
-      btn.dataset.tab = tabId;
-      btn.addEventListener('click', () => switchTab(tabId));
-      mobileNav.appendChild(btn);
-    });
-    highlightMobileNav('combat');
-  };
-
-  const highlightMobileNav = (id) => {
-    mobileNav.querySelectorAll('button').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === id));
-  };
-
   const applySettings = () => {
     document.documentElement.style.setProperty('--scale', state.settings.uiScale);
     document.body.classList.toggle('colorblind', state.settings.colorblind);
     document.body.classList.toggle('no-anim', state.settings.animations === 'off' || window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   };
 
-  if (hamburger) hamburger.addEventListener('click', openNav);
-  if (hamburgerGlobal) hamburgerGlobal.addEventListener('click', openNav);
+  hamburger.addEventListener('click', openNav);
   overlay.addEventListener('click', closeNav);
-  navToggle.addEventListener('click', () => {
-    if (sidebar.classList.contains('open')) closeNav(); else openNav();
-  });
   tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
   window.addEventListener('resize', updateOrientation);
   updateOrientation();
   buildMobileBar();
-  buildMobileNav();
 
-  return { addLog, switchTab, applySettings, updateOrientation, buildMobileBar, buildMobileNav, syncMobileButtons };
+  return { addLog, switchTab, applySettings, updateOrientation, buildMobileBar };
 })();
 
 const Player = (() => {
@@ -539,17 +501,17 @@ const CombatSystem = (() => {
 
     if (type === 'attack') {
       applyPlayerDamage(1);
-      state.cooldowns.combat.attack = now + Math.floor(500 * COOLDOWN_MOD);
+      state.cooldowns.combat.attack = now + 500;
     }
     if (type === 'skill' && skill) {
       if (!Player.spendResource(skill.cost)) return UI.addLog('Not enough resource');
       applyPlayerDamage(skill.multiplier);
-      state.cooldowns.combat[skill.id] = now + Math.floor(skill.cooldown * 1000 * COOLDOWN_MOD);
+      state.cooldowns.combat[skill.id] = now + skill.cooldown * 1000;
     }
     if (type === 'heal') {
       state.player.hp = Utils.clamp(state.player.hp + state.player.maxHp * 0.25, 0, state.player.maxHp);
       UI.addLog('Healed up');
-      state.cooldowns.combat.heal = now + Math.floor(9000 * COOLDOWN_MOD);
+      state.cooldowns.combat.heal = now + 9000;
     }
     if (type === 'potion') {
       if ((state.inventory.consumables.Potion || 0) > 0) {
@@ -557,7 +519,7 @@ const CombatSystem = (() => {
         state.player.hp = Utils.clamp(state.player.hp + 60, 0, state.player.maxHp);
         UI.addLog('Used potion');
       }
-      state.cooldowns.combat.potion = now + Math.floor(12000 * COOLDOWN_MOD);
+      state.cooldowns.combat.potion = now + 12000;
     }
     if (enemy.hp > 0 && type !== 'auto') enemyTurn();
     Player.regenResource();
@@ -567,7 +529,7 @@ const CombatSystem = (() => {
   const autoBattle = () => {
     const now = Date.now();
     if (state.cooldowns.autoBattle > now) return UI.addLog('Auto battle cooling down');
-    state.cooldowns.autoBattle = now + Math.floor(15000 * COOLDOWN_MOD);
+    state.cooldowns.autoBattle = now + 15000;
     let wins = 0; let dmgTaken = 0; let gold = 0;
     for (let i=0;i<5;i++) {
       const enemy = createEnemy('auto');
@@ -627,7 +589,7 @@ const LifeSkillSystem = (() => {
     const now = Date.now();
     const cd = state.cooldowns.life[id];
     if (cd && cd > now) return UI.addLog('Cooling down');
-    state.cooldowns.life[id] = now + Math.floor(skill.cooldown * 1000 * COOLDOWN_MOD);
+    state.cooldowns.life[id] = now + skill.cooldown * 1000;
     const level = (state.lifeSkills?.[id]?.level || 1);
     const tier = Utils.clamp(Math.ceil((state.current.zone + level/10)), 1, 5);
     const tieredReward = `${skill.reward} T${tier}`;
@@ -646,7 +608,7 @@ const LifeSkillSystem = (() => {
     const now = Date.now();
     const cd = state.cooldowns.epic[id];
     if (cd && cd > now) return UI.addLog('EPIC cooldown active');
-    state.cooldowns.epic[id] = now + Math.floor(action.cooldown * 1000 * COOLDOWN_MOD);
+    state.cooldowns.epic[id] = now + action.cooldown * 1000;
     if (action.reward === 'Gold') Player.addGold(30);
     else Inventory.addMaterial(action.reward, 1);
     UI.addLog(`${action.name} complete.`);
@@ -772,18 +734,12 @@ function render() {
   document.getElementById('ascendBtn').disabled = state.player.level < 20;
 
   const enemy = state.current.enemy;
-  const inCombat = !!enemy;
   document.getElementById('enemyName').textContent = enemy ? enemy.name : 'No enemy';
   document.getElementById('enemyHpText').textContent = enemy ? `${enemy.hp}/${enemy.maxHp}` : '--';
   document.getElementById('enemyHpBar').style.width = enemy ? `${(enemy.hp/enemy.maxHp)*100}%` : '0%';
   document.getElementById('exitDungeonBtn').style.display = state.current.inDungeon ? 'inline-flex' : 'none';
   const mobileExit = document.getElementById('exitDungeonBtn-mobile');
   if (mobileExit) mobileExit.style.display = state.current.inDungeon ? 'inline-flex' : 'none';
-
-  ['attackBtn','healBtn','potionBtn','skill1Btn','skill2Btn','skill3Btn'].forEach(id => {
-    const btn = document.getElementById(id);
-    if (btn) btn.disabled = !inCombat;
-  });
 
   renderCooldowns();
   renderHotbar();
@@ -794,7 +750,6 @@ function render() {
   renderCrafting();
   renderDragons();
   renderShop();
-  UI.syncMobileButtons();
 }
 
 function renderCooldowns() {
@@ -1189,7 +1144,6 @@ function init() {
   bindSockets();
   registerSW();
   UI.buildMobileBar();
-  UI.buildMobileNav();
   UI.updateOrientation();
   render();
   persistLoop();
