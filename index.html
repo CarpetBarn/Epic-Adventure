@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <title>Epic Adventure RPG</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+  <meta name="theme-color" content="#111827">
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <button class="hamburger" id="hamburger" aria-label="Toggle navigation">☰</button>
+        <h1>Epic Adventure</h1>
+      </div>
+      <nav class="nav-tabs" id="navTabs">
+        <button data-tab="combat" class="tab-btn active">Combat</button>
+        <button data-tab="zones" class="tab-btn">Zones</button>
+        <button data-tab="inventory" class="tab-btn">Inventory</button>
+        <button data-tab="skillTrees" class="tab-btn">Skill Trees</button>
+        <button data-tab="lifeSkills" class="tab-btn">Life Skills</button>
+        <button data-tab="dragons" class="tab-btn">Dragons</button>
+        <button data-tab="shop" class="tab-btn">Shop</button>
+        <button data-tab="settings" class="tab-btn">Settings</button>
+      </nav>
+      <div class="game-log" id="gameLog" aria-live="polite"></div>
+    </aside>
+
+    <div class="nav-overlay" id="navOverlay"></div>
+
+    <main class="main">
+      <section class="top-panel">
+        <div class="player-card">
+          <div class="player-info">
+            <div>
+              <div class="label">Class</div>
+              <div id="playerClass"></div>
+            </div>
+            <div>
+              <div class="label">Level</div>
+              <div id="playerLevel"></div>
+            </div>
+            <div>
+              <div class="label">Gold</div>
+              <div id="playerGold"></div>
+            </div>
+            <div>
+              <div class="label">Ascension</div>
+              <div id="ascensionLevel"></div>
+            </div>
+          </div>
+          <div class="bars">
+            <div class="bar">
+              <div class="bar-label">HP <span id="playerHpText"></span></div>
+              <div class="bar-track"><div class="bar-fill hp" id="playerHpBar"></div></div>
+            </div>
+            <div class="bar">
+              <div class="bar-label"><span id="resourceName"></span> <span id="resourceText"></span></div>
+              <div class="bar-track"><div class="bar-fill resource" id="resourceBar"></div></div>
+            </div>
+            <div class="bar">
+              <div class="bar-label">XP <span id="playerXpText"></span></div>
+              <div class="bar-track"><div class="bar-fill xp" id="playerXpBar"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel" id="cooldownPanel">
+          <h3>Global Cooldowns</h3>
+          <div class="cooldowns" id="cooldownList"></div>
+        </div>
+      </section>
+
+      <section class="tabs-container">
+        <div class="tab-content active" id="combat">
+          <div class="panel combat-ui">
+            <div class="enemy-card">
+              <h3 id="enemyName">No enemy</h3>
+              <div class="bar">
+                <div class="bar-label">Enemy HP <span id="enemyHpText"></span></div>
+                <div class="bar-track"><div class="bar-fill enemy" id="enemyHpBar"></div></div>
+              </div>
+            </div>
+            <div class="combat-actions">
+              <div class="buttons-grid" id="combatButtons">
+                <button class="primary" id="attackBtn">Attack</button>
+                <button class="primary" id="skill1Btn">Skill 1</button>
+                <button class="primary" id="skill2Btn">Skill 2</button>
+                <button class="primary" id="skill3Btn">Skill 3</button>
+                <button class="secondary" id="healBtn">Heal</button>
+                <button class="secondary" id="potionBtn">Potion</button>
+              </div>
+              <div class="hotbar" id="skillHotbar"></div>
+              <div class="combat-row">
+                <button id="huntBtn" class="outline">Hunt</button>
+                <button id="adventureBtn" class="outline">Adventure</button>
+                <button id="dungeonBtn" class="outline">Dungeon</button>
+                <button id="minibossBtn" class="outline">Mini Boss</button>
+                <button id="bossBtn" class="outline">Boss</button>
+                <button id="autoBattleBtn" class="outline">Auto Battle</button>
+                <button id="exitDungeonBtn" class="ghost">Exit Dungeon</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="zones">
+          <div class="panel">
+            <h3>Zones</h3>
+            <div id="zoneCards" class="zone-cards"></div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="inventory">
+          <div class="panel">
+            <h3>Inventory</h3>
+            <div class="filters" id="inventoryFilters"></div>
+            <div id="inventoryList" class="inventory-list"></div>
+            <div class="inventory-actions">
+              <button id="sellSelectedBtn">Sell</button>
+              <button id="sellAllBtn">Sell All (filter)</button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Fuse Gear</h3>
+            <div class="filters" id="fuseFilters"></div>
+            <div class="fuse-controls">
+              <input type="text" id="fuseIdA" placeholder="Gear ID A">
+              <input type="text" id="fuseIdB" placeholder="Gear ID B">
+              <button id="fuseBtn">Fuse</button>
+            </div>
+            <div id="fuseResult"></div>
+          </div>
+          <div class="panel">
+            <h3>Gems &amp; Sockets</h3>
+            <div class="socket-controls">
+              <input type="text" id="socketGearId" placeholder="Gear ID">
+              <input type="text" id="socketGemId" placeholder="Gem ID">
+              <button id="socketBtn">Socket Gem</button>
+              <button id="removeGemBtn">Remove Gem</button>
+            </div>
+            <div id="socketInfo"></div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="skillTrees">
+          <div class="panel">
+            <h3>Skill Trees</h3>
+            <button id="ascendBtn">Ascend (Lv 20+)</button>
+            <div id="skillTreeInfo"></div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="lifeSkills">
+          <div class="panel">
+            <h3>Life Skills</h3>
+            <div id="lifeSkillList" class="life-list"></div>
+          </div>
+          <div class="panel">
+            <h3>EPIC Loop Actions</h3>
+            <div id="epicActionList" class="life-list"></div>
+          </div>
+          <div class="panel">
+            <h3>Crafting</h3>
+            <div id="craftingList"></div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="dragons">
+          <div class="panel">
+            <h3>Dragons &amp; Eggs</h3>
+            <div id="eggList"></div>
+            <div id="dragonList"></div>
+          </div>
+          <div class="panel">
+            <h3>Breeding</h3>
+            <div class="breeding-controls">
+              <input type="text" id="breedIds" placeholder="Dragon IDs comma separated">
+              <button id="breedBtn">Breed</button>
+            </div>
+            <div id="breedingInfo"></div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="shop">
+          <div class="panel">
+            <h3>Shop</h3>
+            <div id="shopList"></div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="settings">
+          <div class="panel">
+            <h3>Settings</h3>
+            <div class="settings-grid">
+              <label>UI Scale
+                <select id="uiScale">
+                  <option value="1">Medium</option>
+                  <option value="0.9">Small</option>
+                  <option value="1.1">Large</option>
+                </select>
+              </label>
+              <label>Animations
+                <select id="animToggle">
+                  <option value="on">On</option>
+                  <option value="off">Off</option>
+                </select>
+              </label>
+              <label>Loot Filter Mode
+                <select id="lootFilterMode">
+                  <option value="normal">Normal</option>
+                  <option value="strict">Strict</option>
+                </select>
+              </label>
+              <label>Colorblind Mode
+                <select id="colorblindMode">
+                  <option value="off">Off</option>
+                  <option value="on">On</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="mobile-combat-bar" id="mobileCombatBar"></div>
+
+  <script src="game.js" type="module"></script>
+</body>
+</html>
