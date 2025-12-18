@@ -124,6 +124,8 @@ const Utils = {
   chance(percent) { return Math.random() * 100 < percent; },
 };
 
+const COOLDOWN_MOD = 1.2;
+
 const initialState = () => {
   const className = 'Warrior';
   const cls = GameData.classes[className];
@@ -142,6 +144,7 @@ const initialState = () => {
       skillPoints: 0,
       ascension: { level: 0, bonuses: { atk: 0, hp: 0, gold: 0 } },
       purchasedSkills: [],
+      equipment: { weapon: null, armor: null, helmet: null, boots: null, accessory: null },
     },
     settings: { uiScale: 1, animations: 'on', lootFilter: 'normal', colorblind: false },
     inventory: { gear: [], materials: {}, gems: {}, consumables: {} },
@@ -162,7 +165,10 @@ const UI = (() => {
   const overlay = document.getElementById('navOverlay');
   const sidebar = document.getElementById('sidebar');
   const hamburger = document.getElementById('hamburger');
+  const hamburgerGlobal = document.getElementById('hamburgerGlobal');
   const mobileBar = document.getElementById('mobileCombatBar');
+  const mobileNav = document.getElementById('mobileNav');
+  const navToggle = document.getElementById('mobileNavToggle');
 
   const addLog = (text) => {
     state.log.unshift({ text, time: Date.now() });
@@ -174,6 +180,8 @@ const UI = (() => {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+    highlightMobileNav(id);
+    if (window.innerWidth <= 768) closeNav();
     closeNav();
   };
 
@@ -187,6 +195,12 @@ const UI = (() => {
 
   const buildMobileBar = () => {
     mobileBar.innerHTML = '';
+    const navBtn = document.createElement('button');
+    navBtn.id = 'mobileNavBtn';
+    navBtn.textContent = '☰ Navigate';
+    navBtn.classList.add('nav-trigger');
+    navBtn.addEventListener('click', () => openNav());
+    mobileBar.appendChild(navBtn);
     const buttons = [
       { id: 'attackBtn', label: 'Attack' },
       { id: 'skill1Btn', label: 'Skill 1' },
@@ -213,27 +227,82 @@ const UI = (() => {
     });
   };
 
+  const syncMobileButtons = () => {
+    mobileBar.querySelectorAll('button').forEach(btn => {
+      if (btn.id === 'mobileNavBtn') return;
+      const targetId = btn.id.replace('-mobile','');
+      const target = document.getElementById(targetId);
+      if (target) btn.disabled = target.disabled;
+    });
+  };
+
+  const buildMobileNav = () => {
+    mobileNav.innerHTML = '';
+    const navTargets = ['combat','zones','inventory','skillTrees','lifeSkills','dragons','shop','settings'];
+    navTargets.forEach(tabId => {
+      const btn = document.createElement('button');
+      const src = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+      btn.textContent = src ? src.textContent : tabId;
+      btn.dataset.tab = tabId;
+      btn.addEventListener('click', () => switchTab(tabId));
+      mobileNav.appendChild(btn);
+    });
+    highlightMobileNav('combat');
+  };
+
+  const highlightMobileNav = (id) => {
+    mobileNav.querySelectorAll('button').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === id));
+  };
+
   const applySettings = () => {
     document.documentElement.style.setProperty('--scale', state.settings.uiScale);
     document.body.classList.toggle('colorblind', state.settings.colorblind);
     document.body.classList.toggle('no-anim', state.settings.animations === 'off' || window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   };
 
-  hamburger.addEventListener('click', openNav);
+  if (hamburger) hamburger.addEventListener('click', openNav);
+  if (hamburgerGlobal) hamburgerGlobal.addEventListener('click', openNav);
+  document.getElementById('forceOpenNav')?.addEventListener('click', () => {
+    console.log('[NAV] Force open clicked');
+    openNav();
+  });
   overlay.addEventListener('click', closeNav);
+  navToggle.addEventListener('click', () => {
+    if (sidebar.classList.contains('open')) closeNav(); else openNav();
+  });
   tabs.forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
   window.addEventListener('resize', updateOrientation);
   updateOrientation();
   buildMobileBar();
+  buildMobileNav();
 
-  return { addLog, switchTab, applySettings, updateOrientation, buildMobileBar };
+  return { addLog, switchTab, applySettings, updateOrientation, buildMobileBar, buildMobileNav, syncMobileButtons };
 })();
+
+window.addEventListener('DOMContentLoaded', () => {
+  console.log('[NAV] DOMContentLoaded');
+
+  const btn = document.getElementById('hamburgerGlobal');
+  console.log('[NAV] hamburgerGlobal exists?', !!btn);
+
+  if (btn) {
+    btn.addEventListener('click', () => {
+      console.log('[NAV] hamburgerGlobal clicked');
+    });
+  }
+});
 
 const Player = (() => {
   const refreshStats = () => {
     const cls = GameData.classes[state.player.class];
     const levelBonus = 1 + (state.player.level - 1) * 0.02 + state.player.ascension.level * 0.01;
     const equipped = {};
+    const eqMap = state.player.equipment || {};
+    Object.entries(eqMap).forEach(([slot, id]) => {
+      const gear = (state.inventory?.gear || []).find(g => g.id === id && g.slot === slot);
+      if (gear) equipped[slot] = gear;
+    });
+    // Fallback: auto-fill best tier if a slot isn't equipped yet
     (state.inventory?.gear || []).forEach(g => {
       if (!equipped[g.slot] || g.tier > equipped[g.slot].tier) equipped[g.slot] = g;
     });
@@ -379,7 +448,22 @@ const LootSystem = (() => {
 })();
 
 const Inventory = (() => {
-  const addGear = (item) => { state.inventory.gear.push(item); };
+  const ensureEquipmentMap = () => {
+    if (!state.player.equipment) state.player.equipment = { weapon: null, armor: null, helmet: null, boots: null, accessory: null };
+  };
+
+  const removeEquipped = (id) => {
+    ensureEquipmentMap();
+    Object.entries(state.player.equipment).forEach(([slot, eqId]) => {
+      if (eqId === id) state.player.equipment[slot] = null;
+    });
+  };
+
+  const addGear = (item) => {
+    state.inventory.gear.push(item);
+    ensureEquipmentMap();
+    if (!state.player.equipment[item.slot]) state.player.equipment[item.slot] = item.id;
+  };
   const addMaterial = (name, amount) => { state.inventory.materials[name] = (state.inventory.materials[name] || 0) + amount; };
   const addGem = (gem) => { state.inventory.gems[gem.id] = gem; };
   const addConsumable = (cons) => { const key = cons.name; state.inventory.consumables[key] = (state.inventory.consumables[key] || 0) + (cons.amount || 1); };
@@ -388,6 +472,7 @@ const Inventory = (() => {
     const idx = state.inventory.gear.findIndex(g => g.id === id);
     if (idx >= 0) {
       const item = state.inventory.gear.splice(idx,1)[0];
+      removeEquipped(id);
       Player.addGold(20 + item.tier * 10);
       UI.addLog(`Sold ${item.name}`);
     }
@@ -398,6 +483,7 @@ const Inventory = (() => {
     state.inventory.gear = state.inventory.gear.filter(g => {
       const matches = filter === 'All' || g.slot === filter.toLowerCase() || filter === g.rarity;
       if (matches) {
+        removeEquipped(g.id);
         Player.addGold(20 + g.tier * 10);
         sold += 1;
         return false;
@@ -405,6 +491,15 @@ const Inventory = (() => {
       return true;
     });
     if (sold) UI.addLog(`Sold ${sold} items.`);
+  };
+
+  const equipItem = (id) => {
+    const gear = state.inventory.gear.find(g => g.id === id);
+    if (!gear) return UI.addLog('Gear not found');
+    ensureEquipmentMap();
+    state.player.equipment[gear.slot] = gear.id;
+    UI.addLog(`Equipped ${gear.name}`);
+    Player.refreshStats();
   };
 
   const socketGem = (gearId, gemId) => {
@@ -427,7 +522,7 @@ const Inventory = (() => {
     if (gem) { state.inventory.gems[gem.id] = gem; UI.addLog('Gem removed.'); }
   };
 
-  return { addGear, addMaterial, addGem, addConsumable, sellItem, sellAll, socketGem, removeGem };
+  return { addGear, addMaterial, addGem, addConsumable, sellItem, sellAll, socketGem, removeGem, equipItem };
 })();
 
 const CombatSystem = (() => {
@@ -495,23 +590,22 @@ const CombatSystem = (() => {
     const now = Date.now();
     const cd = state.cooldowns.combat[type];
     if (cd && cd > now) return;
-    if (!state.current.enemy) startFight('hunt');
-    if (!state.current.enemy) return;
+    if (!state.current.enemy) return UI.addLog('Start a combat (Hunt/Adventure/Dungeon/Boss) first.');
     const enemy = state.current.enemy;
 
     if (type === 'attack') {
       applyPlayerDamage(1);
-      state.cooldowns.combat.attack = now + 500;
+      state.cooldowns.combat.attack = now + Math.floor(500 * COOLDOWN_MOD);
     }
     if (type === 'skill' && skill) {
       if (!Player.spendResource(skill.cost)) return UI.addLog('Not enough resource');
       applyPlayerDamage(skill.multiplier);
-      state.cooldowns.combat[skill.id] = now + skill.cooldown * 1000;
+      state.cooldowns.combat[skill.id] = now + Math.floor(skill.cooldown * 1000 * COOLDOWN_MOD);
     }
     if (type === 'heal') {
       state.player.hp = Utils.clamp(state.player.hp + state.player.maxHp * 0.25, 0, state.player.maxHp);
       UI.addLog('Healed up');
-      state.cooldowns.combat.heal = now + 9000;
+      state.cooldowns.combat.heal = now + Math.floor(9000 * COOLDOWN_MOD);
     }
     if (type === 'potion') {
       if ((state.inventory.consumables.Potion || 0) > 0) {
@@ -519,7 +613,7 @@ const CombatSystem = (() => {
         state.player.hp = Utils.clamp(state.player.hp + 60, 0, state.player.maxHp);
         UI.addLog('Used potion');
       }
-      state.cooldowns.combat.potion = now + 12000;
+      state.cooldowns.combat.potion = now + Math.floor(12000 * COOLDOWN_MOD);
     }
     if (enemy.hp > 0 && type !== 'auto') enemyTurn();
     Player.regenResource();
@@ -529,7 +623,7 @@ const CombatSystem = (() => {
   const autoBattle = () => {
     const now = Date.now();
     if (state.cooldowns.autoBattle > now) return UI.addLog('Auto battle cooling down');
-    state.cooldowns.autoBattle = now + 15000;
+    state.cooldowns.autoBattle = now + Math.floor(15000 * COOLDOWN_MOD);
     let wins = 0; let dmgTaken = 0; let gold = 0;
     for (let i=0;i<5;i++) {
       const enemy = createEnemy('auto');
@@ -564,6 +658,11 @@ const FusionSystem = (() => {
     const tier = sameRarity ? Math.min(5, gearA.tier + 1) : gearA.tier;
     const failChance = Math.min(60, tier * 10);
     state.inventory.gear = state.inventory.gear.filter(g => g.id !== idA && g.id !== idB);
+    if (state.player.equipment) {
+      Object.entries(state.player.equipment).forEach(([slot, eqId]) => {
+        if (eqId === idA || eqId === idB) state.player.equipment[slot] = null;
+      });
+    }
     if (Utils.chance(failChance)) {
       UI.addLog('Fusion failed! Items lost.');
       return null;
@@ -589,7 +688,7 @@ const LifeSkillSystem = (() => {
     const now = Date.now();
     const cd = state.cooldowns.life[id];
     if (cd && cd > now) return UI.addLog('Cooling down');
-    state.cooldowns.life[id] = now + skill.cooldown * 1000;
+    state.cooldowns.life[id] = now + Math.floor(skill.cooldown * 1000 * COOLDOWN_MOD);
     const level = (state.lifeSkills?.[id]?.level || 1);
     const tier = Utils.clamp(Math.ceil((state.current.zone + level/10)), 1, 5);
     const tieredReward = `${skill.reward} T${tier}`;
@@ -608,7 +707,7 @@ const LifeSkillSystem = (() => {
     const now = Date.now();
     const cd = state.cooldowns.epic[id];
     if (cd && cd > now) return UI.addLog('EPIC cooldown active');
-    state.cooldowns.epic[id] = now + action.cooldown * 1000;
+    state.cooldowns.epic[id] = now + Math.floor(action.cooldown * 1000 * COOLDOWN_MOD);
     if (action.reward === 'Gold') Player.addGold(30);
     else Inventory.addMaterial(action.reward, 1);
     UI.addLog(`${action.name} complete.`);
@@ -734,12 +833,18 @@ function render() {
   document.getElementById('ascendBtn').disabled = state.player.level < 20;
 
   const enemy = state.current.enemy;
+  const inCombat = !!enemy;
   document.getElementById('enemyName').textContent = enemy ? enemy.name : 'No enemy';
   document.getElementById('enemyHpText').textContent = enemy ? `${enemy.hp}/${enemy.maxHp}` : '--';
   document.getElementById('enemyHpBar').style.width = enemy ? `${(enemy.hp/enemy.maxHp)*100}%` : '0%';
   document.getElementById('exitDungeonBtn').style.display = state.current.inDungeon ? 'inline-flex' : 'none';
   const mobileExit = document.getElementById('exitDungeonBtn-mobile');
   if (mobileExit) mobileExit.style.display = state.current.inDungeon ? 'inline-flex' : 'none';
+
+  ['attackBtn','healBtn','potionBtn','skill1Btn','skill2Btn','skill3Btn'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = !inCombat;
+  });
 
   renderCooldowns();
   renderHotbar();
@@ -750,6 +855,7 @@ function render() {
   renderCrafting();
   renderDragons();
   renderShop();
+  UI.syncMobileButtons();
 }
 
 function renderCooldowns() {
@@ -866,12 +972,16 @@ function renderInventory() {
     div.className = 'inventory-item';
     if (item.type === 'gear') {
       const g = item.data;
+      const equipped = state.player.equipment?.[g.slot] === g.id;
       div.innerHTML = `
-        <div class="rarity-${g.rarity}">${g.name} [${g.slot}] (Tier ${g.tier})</div>
+        <div class="rarity-${g.rarity}">${g.name} [${g.slot}] (Tier ${g.tier}) ${equipped ? '<strong>(Equipped)</strong>' : ''}</div>
         <div class="tooltip">ATK ${g.stats.atk} DEF ${g.stats.def} CRIT ${g.stats.crit} HP ${g.stats.hp}</div>
         <div>Item ID: ${g.id}</div>
         <div>Sockets: ${g.sockets} Gems: ${(g.gems||[]).length}</div>
-        <button data-sell="${g.id}">Sell</button>
+        <div class="gear-actions">
+          <button data-equip="${g.id}">${equipped ? 'Re-equip' : 'Equip'}</button>
+          <button data-sell="${g.id}">Sell</button>
+        </div>
       `;
       div.title = `${g.rarity.toUpperCase()} ${g.slot} (Tier ${g.tier})\nATK ${g.stats.atk} DEF ${g.stats.def} CRIT ${g.stats.crit} HP ${g.stats.hp}`;
     } else if (item.type === 'material') div.innerHTML = `${item.data.name}: x${item.data.amount}`;
@@ -879,7 +989,8 @@ function renderInventory() {
     else if (item.type === 'consumable') div.innerHTML = `${item.data.name}: x${item.data.amount}`;
     list.appendChild(div);
   });
-  list.querySelectorAll('[data-sell]').forEach(btn => btn.addEventListener('click', () => Inventory.sellItem(btn.dataset.sell)));
+  list.querySelectorAll('[data-equip]').forEach(btn => btn.addEventListener('click', () => { Inventory.equipItem(btn.dataset.equip); render(); }));
+  list.querySelectorAll('[data-sell]').forEach(btn => btn.addEventListener('click', () => { Inventory.sellItem(btn.dataset.sell); render(); }));
 
   document.getElementById('sellAllBtn').onclick = () => Inventory.sellAll(active);
   document.getElementById('sellSelectedBtn').onclick = () => UI.addLog('Select an item by ID to sell via button.');
@@ -1113,6 +1224,7 @@ function loadGame() {
       eggs: saved.eggs || [],
       dragons: saved.dragons || [],
     };
+    state.player.equipment = { ...defaults.player.equipment, ...(saved.player?.equipment || {}) };
   } else state = defaults;
   Player.refreshStats();
   setupSettings();
@@ -1144,6 +1256,7 @@ function init() {
   bindSockets();
   registerSW();
   UI.buildMobileBar();
+  UI.buildMobileNav();
   UI.updateOrientation();
   render();
   persistLoop();

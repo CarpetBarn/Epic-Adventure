@@ -9,7 +9,16 @@
   <meta name="theme-color" content="#111827">
 </head>
 <body>
+  <button id="mobileNavToggle" class="mobile-nav-toggle">☰</button>
+  <div id="navOverlay" class="nav-overlay"></div>
   <div class="app" id="app">
+    <button
+      id="hamburgerGlobal"
+      class="hamburger hamburger-global"
+      aria-label="Open navigation"
+    >
+      ☰
+    </button>
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <button class="hamburger" id="hamburger" aria-label="Toggle navigation">☰</button>
@@ -27,8 +36,6 @@
       </nav>
       <div class="game-log" id="gameLog" aria-live="polite"></div>
     </aside>
-
-    <div class="nav-overlay" id="navOverlay"></div>
 
     <main class="main">
       <section class="top-panel">
@@ -226,7 +233,12 @@
     </main>
   </div>
 
+  <div class="mobile-nav" id="mobileNav"></div>
   <div class="mobile-combat-bar" id="mobileCombatBar"></div>
+
+  <button id="forceOpenNav" style="position:fixed; bottom:12px; left:12px; z-index:9999;">
+    Force Open Nav (debug)
+  </button>
 
   <script src="game.js" type="module"></script>
 </body>
