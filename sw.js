@@ -1,4 +1,4 @@
-const CACHE = 'epic-adventure-cache-v8';
+const CACHE = 'epic-adventure-cache-v9';
 const ASSETS = [
   './',
   './index.html',

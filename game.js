@@ -134,6 +134,12 @@ const Utils = {
   chance(percent) { return Math.random() * 100 < percent; },
 };
 
+function getActiveTabRoot(tabId) {
+  const matches = Array.from(document.querySelectorAll(`.tab-content#${CSS.escape(tabId)}`));
+  if (matches.length > 1) console.warn(`[UI] Duplicate tab-content id=\"${tabId}\" found:`, matches.length);
+  return matches.find(el => el.classList.contains('active')) || matches[0] || null;
+}
+
 const COOLDOWN_MOD = 1.2;
 
 const initialState = () => {
@@ -1152,7 +1158,9 @@ function filterFuse(slot, tier, rarity) {
 }
 
 function renderSkillTree() {
-  const container = document.getElementById('skillTreeInfo');
+  const root = getActiveTabRoot('skillTrees');
+  const container = root ? root.querySelector('#skillTreeInfo') : document.getElementById('skillTreeInfo');
+  if (!container) return;
   container.innerHTML = `<div>Skill Points: ${state.player.skillPoints} | Gold: ${state.player.gold}</div>`;
   let list = SkillTreeSystem.getAvailable().filter(s => !state.player.purchasedSkills.includes(s.id));
   if (!list.length) {
@@ -1180,7 +1188,9 @@ function renderSkillTree() {
 }
 
 function renderLifeSkills() {
-  const list = document.getElementById('lifeSkillList');
+  const root = getActiveTabRoot('lifeSkills');
+  const list = root ? root.querySelector('#lifeSkillList') : document.getElementById('lifeSkillList');
+  if (!list) return;
   list.innerHTML = '';
   state.lifeSkills = state.lifeSkills || {};
   GameData.lifeSkills.forEach(skill => {
@@ -1199,7 +1209,8 @@ function renderLifeSkills() {
     list.appendChild(card);
   });
 
-  const epicList = document.getElementById('epicActionList');
+  const epicList = root ? root.querySelector('#epicActionList') : document.getElementById('epicActionList');
+  if (!epicList) return;
   epicList.innerHTML = '';
   GameData.epicActions.forEach(action => {
     const cd = state.cooldowns.epic[action.id];
