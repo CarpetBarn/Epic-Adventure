@@ -135,7 +135,7 @@ const initialState = () => {
       purchasedSkills: [],
       equipment: { weapon: null, armor: null, helmet: null, boots: null, accessory: null },
     },
-    settings: { uiScale: 1, animations: 'on', lootFilter: 'normal', colorblind: false },
+    settings: { uiScale: 1, animations: 'on', lootFilter: 'normal', colorblind: false, forceMobile: false },
     inventory: { gear: [], materials: {}, gems: {}, consumables: {} },
     eggs: [],
     dragons: [],
@@ -247,6 +247,7 @@ const UI = (() => {
     document.documentElement.style.setProperty('--scale', state.settings.uiScale);
     document.body.classList.toggle('colorblind', state.settings.colorblind);
     document.body.classList.toggle('no-anim', state.settings.animations === 'off' || window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    document.body.classList.toggle('force-mobile', state.settings.forceMobile);
   };
 
   if (hamburger) hamburger.addEventListener('click', openNav);
@@ -1141,6 +1142,11 @@ function setupSettings() {
   document.getElementById('animToggle').value = state.settings.animations;
   document.getElementById('lootFilterMode').value = state.settings.lootFilter;
   document.getElementById('colorblindMode').value = state.settings.colorblind ? 'on' : 'off';
+  const forceBtn = document.getElementById('forceMobileToggle');
+  const refreshForceBtn = () => {
+    forceBtn.textContent = state.settings.forceMobile ? 'Mobile: On' : 'Mobile: Off';
+  };
+  refreshForceBtn();
   ['uiScale','animToggle','lootFilterMode','colorblindMode'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
       state.settings.uiScale = parseFloat(document.getElementById('uiScale').value);
@@ -1150,6 +1156,12 @@ function setupSettings() {
       UI.applySettings();
       SaveSystem.save(state);
     });
+  });
+  forceBtn.addEventListener('click', () => {
+    state.settings.forceMobile = !state.settings.forceMobile;
+    UI.applySettings();
+    refreshForceBtn();
+    SaveSystem.save(state);
   });
   UI.applySettings();
 }

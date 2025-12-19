@@ -283,6 +283,21 @@ button.ghost { background: rgba(255,255,255,0.08); }
   min-width: 90px;
   font-weight: 600;
 }
+
+body.force-mobile .app { grid-template-columns: 1fr; }
+body.force-mobile .main { padding: 0.75rem; margin-left: 0; }
+body.force-mobile .top-panel { grid-template-columns: 1fr; }
+body.force-mobile .mobile-nav { display: flex; }
+body.force-mobile .mobile-combat-bar { display: flex; }
+body.force-mobile .combat-actions .buttons-grid { display: none; }
+body.force-mobile .combat-row { display: none; }
+body.force-mobile .hamburger-global {
+  display: inline-flex;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+}
 .mobile-combat-bar .nav-trigger {
   font-weight: 700;
   background: linear-gradient(135deg, #fbbf24, #f97316);
