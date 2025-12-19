@@ -30,6 +30,8 @@ const GameData = (() => {
     Ranger: { hp: 115, atk: 13, def: 9, crit: 11, spd: 10, resource: { name: 'Focus', max: 120, regenTurn: 16, onHit: 12 } },
     Paladin: { hp: 150, atk: 12, def: 13, crit: 5, spd: 7, resource: { name: 'Zeal', max: 110, regenTurn: 16, onHit: 14 } },
     Necromancer: { hp: 100, atk: 13, def: 8, crit: 9, spd: 9, resource: { name: 'Souls', max: 140, regenTurn: 12, onHit: 16 } },
+    Bard: { hp: 105, atk: 12, def: 9, crit: 14, spd: 12, resource: { name: 'Notes', max: 120, regenTurn: 18, onHit: 12 } },
+    Monk: { hp: 130, atk: 15, def: 11, crit: 8, spd: 13, resource: { name: 'Chi', max: 140, regenTurn: 15, onHit: 18 } },
   };
 
   const zones = Array.from({ length: 7 }).map((_, i) => ({
@@ -40,54 +42,38 @@ const GameData = (() => {
     rarityBonus: i * 5,
   }));
 
+  const makeSkills = (prefix, baseCost, baseCd, baseMult) => Array.from({ length: 20 }).map((_, i) => ({
+    id: `${prefix}-${i+1}`,
+    name: `${prefix} Skill ${i+1}`,
+    cost: baseCost + Math.floor(i/2) * 3,
+    cooldown: baseCd + Math.floor(i/3),
+    multiplier: Number((baseMult + i * 0.08).toFixed(2)),
+    buff: i % 5 === 0 ? { def: 0.05 + i * 0.002 } : undefined,
+    debuff: i % 7 === 0 ? { spd: -0.03 - i * 0.001 } : undefined,
+  }));
+
   const skills = {
-    Warrior: [
-      { id: 'slash', name: 'Power Slash', cost: 25, cooldown: 6, multiplier: 1.6 },
-      { id: 'shout', name: 'War Shout', cost: 30, cooldown: 8, multiplier: 1.2, buff: { def: 0.1 } },
-      { id: 'cleave', name: 'Cleave', cost: 40, cooldown: 10, multiplier: 2.1 },
-    ],
-    Rogue: [
-      { id: 'stab', name: 'Quick Stab', cost: 20, cooldown: 5, multiplier: 1.4 },
-      { id: 'flurry', name: 'Flurry', cost: 35, cooldown: 8, multiplier: 1.8 },
-      { id: 'smoke', name: 'Smoke Bomb', cost: 30, cooldown: 9, multiplier: 1.1, buff: { evade: 0.15 } },
-    ],
-    Mage: [
-      { id: 'bolt', name: 'Arcane Bolt', cost: 25, cooldown: 5, multiplier: 1.7 },
-      { id: 'nova', name: 'Frost Nova', cost: 40, cooldown: 9, multiplier: 2.2 },
-      { id: 'barrier', name: 'Barrier', cost: 35, cooldown: 10, multiplier: 1.2, buff: { shield: 0.15 } },
-    ],
-    Cleric: [
-      { id: 'smite', name: 'Smite', cost: 22, cooldown: 6, multiplier: 1.5 },
-      { id: 'bless', name: 'Blessing', cost: 30, cooldown: 8, multiplier: 1.1, buff: { heal: 0.15 } },
-      { id: 'radiance', name: 'Radiance', cost: 35, cooldown: 10, multiplier: 1.8 },
-    ],
-    Ranger: [
-      { id: 'aim', name: 'Aimed Shot', cost: 22, cooldown: 6, multiplier: 1.6 },
-      { id: 'volley', name: 'Volley', cost: 32, cooldown: 8, multiplier: 1.9 },
-      { id: 'trap', name: 'Snare Trap', cost: 28, cooldown: 9, multiplier: 1.3, debuff: { spd: -0.1 } },
-    ],
-    Paladin: [
-      { id: 'strike', name: 'Holy Strike', cost: 25, cooldown: 6, multiplier: 1.6 },
-      { id: 'ward', name: 'Ward', cost: 30, cooldown: 9, multiplier: 1.2, buff: { def: 0.12 } },
-      { id: 'judgment', name: 'Judgment', cost: 40, cooldown: 11, multiplier: 2.3 },
-    ],
-    Necromancer: [
-      { id: 'drain', name: 'Life Drain', cost: 24, cooldown: 6, multiplier: 1.5, buff: { heal: 0.1 } },
-      { id: 'bones', name: 'Bone Spear', cost: 34, cooldown: 9, multiplier: 2.0 },
-      { id: 'army', name: 'Raise Army', cost: 45, cooldown: 12, multiplier: 2.4 },
-    ],
+    Warrior: makeSkills('War', 24, 5, 1.3),
+    Rogue: makeSkills('Rog', 20, 5, 1.25),
+    Mage: makeSkills('Mag', 22, 5, 1.35),
+    Cleric: makeSkills('Cle', 20, 5, 1.2),
+    Ranger: makeSkills('Ran', 21, 5, 1.3),
+    Paladin: makeSkills('Pal', 23, 6, 1.35),
+    Necromancer: makeSkills('Nec', 22, 6, 1.4),
+    Bard: makeSkills('Bar', 18, 4, 1.15),
+    Monk: makeSkills('Mon', 20, 4, 1.45),
   };
 
   const lifeSkills = [
-    { id: 'mining', name: 'Mining', cooldown: 20, xp: 15, reward: 'Ore' },
-    { id: 'foraging', name: 'Foraging', cooldown: 18, xp: 12, reward: 'Herb' },
-    { id: 'fishing', name: 'Fishing', cooldown: 22, xp: 14, reward: 'Fish' },
-    { id: 'hunting', name: 'Hunting', cooldown: 16, xp: 13, reward: 'Hide' },
-    { id: 'blacksmithing', name: 'Blacksmithing', cooldown: 26, xp: 18, reward: 'Ingot' },
-    { id: 'alchemy', name: 'Alchemy', cooldown: 26, xp: 18, reward: 'Reagent' },
-    { id: 'cooking', name: 'Cooking', cooldown: 20, xp: 16, reward: 'Meal' },
-    { id: 'enchanting', name: 'Enchanting', cooldown: 28, xp: 20, reward: 'Charm' },
-    { id: 'dragon', name: 'Dragon Handling', cooldown: 30, xp: 22, reward: 'Scale' },
+    { id: 'mining', name: 'Mining', cooldown: 20, xp: 15, reward: 'Iron Ore' },
+    { id: 'foraging', name: 'Foraging', cooldown: 18, xp: 12, reward: 'Herb Bundle' },
+    { id: 'fishing', name: 'Fishing', cooldown: 22, xp: 14, reward: 'Fresh Fish' },
+    { id: 'hunting', name: 'Hunting', cooldown: 16, xp: 13, reward: 'Beast Hide' },
+    { id: 'blacksmithing', name: 'Blacksmithing', cooldown: 26, xp: 18, reward: 'Metal Ingot' },
+    { id: 'alchemy', name: 'Alchemy', cooldown: 26, xp: 18, reward: 'Alchemical Resin' },
+    { id: 'cooking', name: 'Cooking', cooldown: 20, xp: 16, reward: 'Hearty Meal' },
+    { id: 'enchanting', name: 'Enchanting', cooldown: 28, xp: 20, reward: 'Enchanted Dust' },
+    { id: 'dragon', name: 'Dragon Handling', cooldown: 30, xp: 22, reward: 'Dragon Scale' },
   ];
 
   const epicActions = [
@@ -98,10 +84,13 @@ const GameData = (() => {
   ];
 
   const recipes = [
-    { id: 'potion', name: 'Minor Potion', requires: { Herb: 2 }, produces: { consumable: { name: 'Potion', heal: 30 } } },
-    { id: 'ingot', name: 'Refine Ingot', requires: { Ore: 3 }, produces: { material: { name: 'Ingot', amount: 1 } } },
-    { id: 'bow', name: 'Craft Hunter Bow', requires: { Wood: 2, Ingot: 1 }, produces: { gear: { slot: 'weapon', rarity: 'uncommon', tier: 1 } } },
-    { id: 'elixir', name: 'Reagent Elixir', requires: { Reagent: 3 }, produces: { consumable: { name: 'Elixir', heal: 60 } } },
+    { id: 'potion', name: 'Minor Potion', requires: { 'Herb Bundle': 2, 'Fresh Fish': 1 }, produces: { consumable: { name: 'Potion', heal: 30 } } },
+    { id: 'greaterPotion', name: 'Greater Potion', requires: { 'Herb Bundle': 4, 'Alchemical Resin': 2 }, produces: { consumable: { name: 'Potion', heal: 60, amount: 1 } } },
+    { id: 'ingot', name: 'Refine Ingot', requires: { 'Iron Ore': 3 }, produces: { material: { name: 'Metal Ingot', amount: 2 } } },
+    { id: 'bow', name: 'Craft Hunter Bow', requires: { 'Beast Hide': 2, 'Metal Ingot': 1 }, produces: { gear: { slot: 'weapon', rarity: 'uncommon', tier: 1 } } },
+    { id: 'meal', name: 'Cook Feast', requires: { 'Hearty Meal': 2, 'Fresh Fish': 2 }, produces: { consumable: { name: 'Elixir', heal: 80 } } },
+    { id: 'charm', name: 'Enchant Charm', requires: { 'Enchanted Dust': 3, 'Alchemical Resin': 2 }, produces: { gem: true } },
+    { id: 'scaleMail', name: 'Dragon Scale Mail', requires: { 'Dragon Scale': 2, 'Metal Ingot': 2 }, produces: { gear: { slot: 'armor', rarity: 'rare', tier: 3 } } },
   ];
 
   const shop = [
@@ -151,7 +140,7 @@ const initialState = () => {
     eggs: [],
     dragons: [],
     cooldowns: { combat: {}, life: {}, epic: {}, autoBattle: 0, zoneMove: 0 },
-    current: { zone: 1, enemy: null, inDungeon: false, dungeonFights: 0, lastAction: null },
+    current: { zone: 1, enemy: null, inDungeon: false, dungeonFights: 0, lastAction: null, healUses: 2, healCooldown: 0 },
     log: [],
     lifeSkills: {},
   };
@@ -262,10 +251,6 @@ const UI = (() => {
 
   if (hamburger) hamburger.addEventListener('click', openNav);
   if (hamburgerGlobal) hamburgerGlobal.addEventListener('click', openNav);
-  document.getElementById('forceOpenNav')?.addEventListener('click', () => {
-    console.log('[NAV] Force open clicked');
-    openNav();
-  });
   overlay.addEventListener('click', closeNav);
   navToggle.addEventListener('click', () => {
     if (sidebar.classList.contains('open')) closeNav(); else openNav();
@@ -278,19 +263,6 @@ const UI = (() => {
 
   return { addLog, switchTab, applySettings, updateOrientation, buildMobileBar, buildMobileNav, syncMobileButtons };
 })();
-
-window.addEventListener('DOMContentLoaded', () => {
-  console.log('[NAV] DOMContentLoaded');
-
-  const btn = document.getElementById('hamburgerGlobal');
-  console.log('[NAV] hamburgerGlobal exists?', !!btn);
-
-  if (btn) {
-    btn.addEventListener('click', () => {
-      console.log('[NAV] hamburgerGlobal clicked');
-    });
-  }
-});
 
 const Player = (() => {
   const refreshStats = () => {
@@ -380,7 +352,7 @@ const Player = (() => {
   return { refreshStats, gainXp, addGold, takeDamage, spendResource, regenResource };
 })();
 
-const LootSystem = (() => {
+  const LootSystem = (() => {
   const rarityByZone = (zoneId) => {
     return GameData.rarities.map((r, idx) => {
       let weight = r.weight;
@@ -406,16 +378,27 @@ const LootSystem = (() => {
     const rarity = pickRarity(zoneId);
     const tier = Math.min(5, 1 + Math.floor(zoneId / 2));
     const itemLevel = state.player.level + zoneId;
-    const stats = {
+    const baseStats = {
       atk: Math.floor(itemLevel * (1 + Math.random() * 0.6)),
       def: Math.floor(itemLevel * (0.6 + Math.random() * 0.6)),
       crit: Math.floor(2 + Math.random() * 6),
       hp: Math.floor(itemLevel * 4),
+      spd: Math.floor(1 + Math.random() * 3),
     };
+    const affixes = [
+      { name: 'Savage', bonus: { atk: Math.floor(itemLevel * 0.2) } },
+      { name: 'Stalwart', bonus: { def: Math.floor(itemLevel * 0.15) } },
+      { name: 'Vital', bonus: { hp: Math.floor(itemLevel * 1.5) } },
+      { name: 'Fleet', bonus: { spd: 2 } },
+      { name: 'Keen', bonus: { crit: 3 } },
+    ];
+    const chosenAffix = affixes[Math.floor(Math.random() * affixes.length)];
+    const stats = { ...baseStats };
+    Object.entries(chosenAffix.bonus).forEach(([k,v]) => { stats[k] = (stats[k] || 0) + v; });
     const sockets = (rarity.key === 'epic' || rarity.key === 'legendary' || tier >= 3) ? Math.min(3, 1 + Math.floor(Math.random() * tier)) : 0;
     return {
       id: Utils.uuid(),
-      name: `${rarity.name} ${slot}`,
+      name: `${chosenAffix.name} ${rarity.name} ${slot}`,
       rarity: rarity.key,
       slot,
       tier,
@@ -538,6 +521,8 @@ const CombatSystem = (() => {
 
   const startFight = (type='hunt') => {
     state.current.enemy = createEnemy(type);
+    state.current.healUses = 2;
+    state.current.healCooldown = 0;
     UI.addLog(`Encountered ${state.current.enemy.name}`);
     render();
   };
@@ -603,20 +588,26 @@ const CombatSystem = (() => {
       state.cooldowns.combat[skill.id] = now + Math.floor(skill.cooldown * 1000 * COOLDOWN_MOD);
     }
     if (type === 'heal') {
+      if (state.current.healUses <= 0) return UI.addLog('Heal uses exhausted this battle.');
+      if (state.current.healCooldown > 0) return UI.addLog(`Heal cooling down (${state.current.healCooldown} turns).`);
       state.player.hp = Utils.clamp(state.player.hp + state.player.maxHp * 0.25, 0, state.player.maxHp);
       UI.addLog('Healed up');
-      state.cooldowns.combat.heal = now + Math.floor(9000 * COOLDOWN_MOD);
+      state.current.healUses -= 1;
+      state.current.healCooldown = 5;
     }
     if (type === 'potion') {
       if ((state.inventory.consumables.Potion || 0) > 0) {
         state.inventory.consumables.Potion -= 1;
         state.player.hp = Utils.clamp(state.player.hp + 60, 0, state.player.maxHp);
         UI.addLog('Used potion');
+      } else {
+        UI.addLog('No potions available.');
       }
       state.cooldowns.combat.potion = now + Math.floor(12000 * COOLDOWN_MOD);
     }
     if (enemy.hp > 0 && type !== 'auto') enemyTurn();
     Player.regenResource();
+    if (state.current.healCooldown > 0) state.current.healCooldown = Math.max(0, state.current.healCooldown - 1);
     render();
   };
 
@@ -681,7 +672,7 @@ const FusionSystem = (() => {
   return { fuse };
 })();
 
-const LifeSkillSystem = (() => {
+  const LifeSkillSystem = (() => {
   const perform = (id) => {
     const skill = GameData.lifeSkills.find(l => l.id === id);
     if (!skill) return;
@@ -691,14 +682,14 @@ const LifeSkillSystem = (() => {
     state.cooldowns.life[id] = now + Math.floor(skill.cooldown * 1000 * COOLDOWN_MOD);
     const level = (state.lifeSkills?.[id]?.level || 1);
     const tier = Utils.clamp(Math.ceil((state.current.zone + level/10)), 1, 5);
-    const tieredReward = `${skill.reward} T${tier}`;
-    Inventory.addMaterial(tieredReward, 1);
+    const amount = tier;
+    Inventory.addMaterial(skill.reward, amount);
     const progress = state.lifeSkills?.[id]?.xp || 0;
     const newProgress = progress + skill.xp;
     const newLevel = Math.min(200, Math.floor(newProgress / 100) + 1);
     state.lifeSkills = state.lifeSkills || {};
     state.lifeSkills[id] = { xp: newProgress, level: newLevel };
-    UI.addLog(`${skill.name} gained materials and XP.`);
+    UI.addLog(`${skill.name} gained ${amount}x ${skill.reward} (Tier ${tier}) and XP.`);
   };
 
   const performEpic = (id) => {
@@ -937,6 +928,8 @@ function startGateBoss(id) {
   if (!zone) return;
   if (state.player.level < zone.levelReq) return UI.addLog('Level too low');
   state.current.zone = id;
+  state.current.healUses = 2;
+  state.current.healCooldown = 0;
   state.current.enemy = { name: zone.gateBoss, hp: 200 + id*40, maxHp: 200 + id*40, atk: 20+id*4, def: 10+id*3, type: 'gate' };
   UI.addLog(`Gate boss ${zone.gateBoss} appears!`);
   render();

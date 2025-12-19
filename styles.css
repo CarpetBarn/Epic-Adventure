@@ -286,8 +286,13 @@ button.ghost { background: rgba(255,255,255,0.08); }
   border-top: 1px solid rgba(255,255,255,0.08);
   overflow-x: auto;
   z-index: 6;
+  gap: 0.4rem;
 }
-.mobile-combat-bar button { margin-right: 0.35rem; }
+.mobile-combat-bar button {
+  margin-right: 0.35rem;
+  min-width: 90px;
+  font-weight: 600;
+}
 .mobile-combat-bar .nav-trigger {
   font-weight: 700;
   background: linear-gradient(135deg, #fbbf24, #f97316);
