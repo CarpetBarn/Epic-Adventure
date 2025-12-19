@@ -1153,8 +1153,12 @@ function filterFuse(slot, tier, rarity) {
 
 function renderSkillTree() {
   const container = document.getElementById('skillTreeInfo');
-  container.innerHTML = `<div>Skill Points: ${state.player.skillPoints}</div>`;
-  const list = SkillTreeSystem.getAvailable().filter(s => !state.player.purchasedSkills.includes(s.id));
+  container.innerHTML = `<div>Skill Points: ${state.player.skillPoints} | Gold: ${state.player.gold}</div>`;
+  let list = SkillTreeSystem.getAvailable().filter(s => !state.player.purchasedSkills.includes(s.id));
+  if (!list.length) {
+    SkillTreeSystem.initFromState();
+    list = SkillTreeSystem.getAvailable().filter(s => !state.player.purchasedSkills.includes(s.id));
+  }
   const segments = [
     { title: 'Attack', filter: id => id.startsWith('atk-') },
     { title: 'Defense', filter: id => id.startsWith('def-') },
@@ -1178,6 +1182,7 @@ function renderSkillTree() {
 function renderLifeSkills() {
   const list = document.getElementById('lifeSkillList');
   list.innerHTML = '';
+  state.lifeSkills = state.lifeSkills || {};
   GameData.lifeSkills.forEach(skill => {
     const info = state.lifeSkills?.[skill.id] || { level:1, xp:0 };
     const card = document.createElement('div');
