@@ -298,6 +298,7 @@ body.force-mobile .hamburger-global {
   left: 12px;
   z-index: 10;
 }
+body:not(.force-mobile) .mobile-combat-bar { display: none; }
 .mobile-combat-bar .nav-trigger {
   font-weight: 700;
   background: linear-gradient(135deg, #fbbf24, #f97316);

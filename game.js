@@ -1230,6 +1230,10 @@ function loadGame() {
       dragons: saved.dragons || [],
     };
     state.player.equipment = { ...defaults.player.equipment, ...(saved.player?.equipment || {}) };
+    // Guard: don't force mobile layout on large screens unless user turns it on this session
+    if (state.settings.forceMobile && window.innerWidth > 1024) {
+      state.settings.forceMobile = false;
+    }
   } else state = defaults;
   Player.refreshStats();
   setupSettings();
