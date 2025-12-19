@@ -136,8 +136,22 @@ const Utils = {
 
 function getActiveTabRoot(tabId) {
   const matches = Array.from(document.querySelectorAll(`.tab-content#${CSS.escape(tabId)}`));
-  if (matches.length > 1) console.warn(`[UI] Duplicate tab-content id=\"${tabId}\" found:`, matches.length);
+  if (matches.length > 1) console.warn(`[UI] Duplicate tab-content id="${tabId}" found:`, matches.length);
   return matches.find(el => el.classList.contains('active')) || matches[0] || null;
+}
+
+function sanitizeState() {
+  state.player = state.player || {};
+  state.player.purchasedSkills = state.player.purchasedSkills || [];
+  state.player.skillBonuses = state.player.skillBonuses || { atk:0, def:0, hp:0, crit:0, spd:0, resource:0, gold:0 };
+
+  state.cooldowns = state.cooldowns || {};
+  state.cooldowns.combat = state.cooldowns.combat || {};
+  state.cooldowns.life = state.cooldowns.life || {};
+  state.cooldowns.epic = state.cooldowns.epic || {};
+  state.cooldowns.autoBattle = state.cooldowns.autoBattle || 0;
+
+  state.lifeSkills = state.lifeSkills || {};
 }
 
 const COOLDOWN_MOD = 1.2;
@@ -1188,11 +1202,15 @@ function renderSkillTree() {
 }
 
 function renderLifeSkills() {
-  const root = getActiveTabRoot('lifeSkills');
-  const list = root ? root.querySelector('#lifeSkillList') : document.getElementById('lifeSkillList');
-  if (!list) return;
+  const list = document.getElementById('lifeSkillList');
+  const epicList = document.getElementById('epicActionList');
+  if (!list || !epicList) return;
+
   list.innerHTML = '';
   state.lifeSkills = state.lifeSkills || {};
+  state.cooldowns = state.cooldowns || {};
+  state.cooldowns.life = state.cooldowns.life || {};
+  state.cooldowns.epic = state.cooldowns.epic || {};
   GameData.lifeSkills.forEach(skill => {
     const info = state.lifeSkills?.[skill.id] || { level:1, xp:0 };
     const card = document.createElement('div');
@@ -1209,7 +1227,7 @@ function renderLifeSkills() {
     list.appendChild(card);
   });
 
-  const epicList = root ? root.querySelector('#epicActionList') : document.getElementById('epicActionList');
+  const epicList = document.getElementById('epicActionList');
   if (!epicList) return;
   epicList.innerHTML = '';
   GameData.epicActions.forEach(action => {
@@ -1404,6 +1422,7 @@ function loadGame() {
       state.settings.forceMobile = false;
     }
   } else state = defaults;
+  sanitizeState();
   SkillTreeSystem.initFromState();
   Player.refreshStats();
   setupSettings();
