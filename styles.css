@@ -223,16 +223,6 @@ button.ghost { background: rgba(255,255,255,0.08); }
   display: none;
 }
 
-/* DEBUG: make hamburger impossible to miss */
-.hamburger-global {
-  outline: 4px solid magenta !important;
-  background: yellow !important;
-  color: black !important;
-  display: inline-flex !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-}
-
 .mobile-nav-toggle {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 12px);
