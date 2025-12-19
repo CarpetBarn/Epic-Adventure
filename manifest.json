@@ -1,0 +1,9 @@
+{
+  "name": "Epic Adventure RPG",
+  "short_name": "Epic RPG",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b1221",
+  "theme_color": "#111827",
+  "orientation": "any"
+}
