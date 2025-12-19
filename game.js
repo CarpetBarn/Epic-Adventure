@@ -38,23 +38,32 @@ const GameData = (() => {
     id: i + 1,
     name: `Zone ${i + 1}`,
     levelReq: (i + 1) * 5,
-    gateBoss: `Gate Guardian ${i + 1}`,
+    gateBoss: ['Warden of Meadows','Sentinel of Groves','Watcher of Peaks','Guardian of Depths','Warlord of Ash','Keeper of Storms','Ruler of Echoes'][i],
     rarityBonus: i * 5,
   }));
-
-  const skillNames = {
-    War: ['Power Slash','War Shout','Cleave'],
-    Rog: ['Quick Stab','Flurry','Smoke Bomb'],
-    Mag: ['Arcane Bolt','Frost Nova','Barrier'],
-    Cle: ['Smite','Blessing','Radiance'],
-    Ran: ['Aimed Shot','Volley','Snare Trap'],
-    Pal: ['Holy Strike','Ward','Judgment'],
-    Nec: ['Life Drain','Bone Spear','Raise Army'],
-    Bar: ['Inspiring Tune','Piercing Note','Encore'],
-    Mon: ['Palm Strike','Chi Burst','Serenity'],
+  const zoneMonsters = {
+    1: ['Field Boar','Rowdy Bandit','Wild Wolf'],
+    2: ['Forest Sprite','Dire Bear','Treant'],
+    3: ['Cliff Drake','Stone Golem','Harpie'],
+    4: ['Cave Troll','Crystal Serpent','Lurking Spider'],
+    5: ['Ash Hound','Ember Mage','Lava Elemental'],
+    6: ['Tempest Knight','Storm Djinn','Thunder Roc'],
+    7: ['Echo Phantom','Elder Lich','Void Stalker'],
   };
 
-  const makeSkills = (prefix, baseCost, baseCd, baseMult) => Array.from({ length: 20 }).map((_, i) => ({
+  const skillNames = {
+    War: ['Power Slash','War Shout','Cleave','Shield Bash','Berserker Blow','Whirlwind','Rally','Shatter Armor','Last Stand','Overrun','Heroic Strike'],
+    Rog: ['Quick Stab','Flurry','Smoke Bomb','Evasion','Poison Edge','Backstab','Fan of Knives','Shadowstep','Disarm','Marked Target','Vanish'],
+    Mag: ['Arcane Bolt','Frost Nova','Barrier','Fireball','Chain Lightning','Ice Lance','Mana Surge','Spellshield','Meteor','Arcane Torrent','Time Warp'],
+    Cle: ['Smite','Blessing','Radiance','Renew','Holy Nova','Purify','Sanctuary','Judging Light','Salvation','Ward of Faith','Guardian Spirit'],
+    Ran: ['Aimed Shot','Volley','Snare Trap','Piercing Arrow','Camouflage','Hawk Eye','Explosive Shot','Barrage','Wolf Companion','Tracking Mark','Evasive Roll'],
+    Pal: ['Holy Strike','Ward','Judgment','Consecrate','Divine Favor','Smite Evil','Sacred Shield','Hammer of Light','Zealous Charge','Bulwark','Sanctified Blade'],
+    Nec: ['Life Drain','Bone Spear','Raise Army','Curse','Soul Leech','Bone Prison','Ghastly Howl','Siphon Strength','Plague Cloud','Summon Wraith','Death Pact'],
+    Bar: ['Inspiring Tune','Piercing Note','Encore','Disorient','Crescendo','Soothing Melody','Battle Hymn','Dissonant Chord','Quick Tempo','Finale','Echoed Verse'],
+    Mon: ['Palm Strike','Chi Burst','Serenity','Meditate','Spinning Kick','Pressure Point','Inner Focus','Wind Walk','Tiger Claw','Stone Palm','Harmony'],
+  };
+
+  const makeSkills = (prefix, baseCost, baseCd, baseMult) => Array.from({ length: 30 }).map((_, i) => ({
     id: `${prefix}-${i+1}`,
     name: skillNames[prefix]?.[i] || `${prefix} Skill ${i+1}`,
     cost: baseCost + Math.floor(i/2) * 3,
@@ -528,9 +537,12 @@ const CombatSystem = (() => {
 
   const createEnemy = (type='hunt') => {
     const zone = state.current.zone;
-    const base = 40 + zone * 10;
-    const hp = base + Math.floor(Math.random()*20);
-    const name = type === 'boss' ? `Boss of Zone ${zone}` : type === 'miniboss' ? `Mini Boss ${zone}` : `Enemy ${zone}-${Math.floor(Math.random()*100)}`;
+    const base = 40 + zone * 12;
+    const hp = base + Math.floor(Math.random()*25);
+    const zoneMobs = GameData.zoneMonsters[zone] || ['Enemy'];
+    let name = zoneMobs[Math.floor(Math.random()*zoneMobs.length)];
+    if (type === 'boss') name = `${GameData.zones[zone-1].gateBoss}`;
+    if (type === 'miniboss') name = `${zoneMobs[0]} Captain`;
     return { name, hp, maxHp: hp, atk: 10 + zone * 3, def: 5 + zone * 2, type };
   };
 
@@ -772,28 +784,44 @@ const DragonSystem = (() => {
 })();
 
 const SkillTreeSystem = (() => {
-  const baseTree = [
-    { id: 'st-1', name: 'Power Training', cost: 1, bonus: { atk: 2 } },
-    { id: 'st-2', name: 'Sturdy Frame', cost: 1, bonus: { hp: 10 } },
-    { id: 'st-3', name: 'Iron Will', cost: 2, bonus: { def: 2 } },
-    { id: 'st-4', name: 'Sharpened Edge', cost: 2, bonus: { crit: 1 } },
-    { id: 'st-5', name: 'Fleet Foot', cost: 2, bonus: { spd: 1 } },
-    { id: 'st-6', name: 'Battle Focus', cost: 3, bonus: { resource: 5 } },
-    { id: 'st-7', name: 'Berserker', cost: 3, bonus: { atk: 4, hp: -5 } },
-    { id: 'st-8', name: 'Guardian', cost: 3, bonus: { def: 3, hp: 12 } },
-    { id: 'st-9', name: 'Keen Eye', cost: 3, bonus: { crit: 2 } },
-    { id: 'st-10', name: 'Vitality', cost: 3, bonus: { hp: 20 } },
-    { id: 'st-11', name: 'Weapon Mastery', cost: 4, bonus: { atk: 6 } },
-    { id: 'st-12', name: 'Stone Skin', cost: 4, bonus: { def: 5 } },
-    { id: 'st-13', name: 'Arcane Mind', cost: 4, bonus: { resource: 10 } },
-    { id: 'st-14', name: 'Precision', cost: 4, bonus: { crit: 3 } },
-    { id: 'st-15', name: 'Quickstep', cost: 4, bonus: { spd: 2 } },
-    { id: 'st-16', name: 'Fortune', cost: 5, bonus: { gold: 0.02 } },
-    { id: 'st-17', name: 'Bloodlust', cost: 5, bonus: { atk: 8, hp: -10 } },
-    { id: 'st-18', name: 'Aegis', cost: 5, bonus: { def: 8 } },
-    { id: 'st-19', name: 'Juggernaut', cost: 5, bonus: { hp: 35 } },
-    { id: 'st-20', name: 'Grand Master', cost: 6, bonus: { atk: 10, def: 5, hp: 40, crit: 3 } },
+  const attackSkills = [
+    { id: 'atk-1', name: 'Power Training', cost: 1, bonus: { atk: 2 } },
+    { id: 'atk-2', name: 'Sharpened Edge', cost: 2, bonus: { crit: 1 } },
+    { id: 'atk-3', name: 'Berserker', cost: 3, bonus: { atk: 4, hp: -5 } },
+    { id: 'atk-4', name: 'Weapon Mastery', cost: 4, bonus: { atk: 6 } },
+    { id: 'atk-5', name: 'Precision', cost: 4, bonus: { crit: 3 } },
+    { id: 'atk-6', name: 'Bloodlust', cost: 5, bonus: { atk: 8, hp: -10 } },
+    { id: 'atk-7', name: 'Juggernaut', cost: 5, bonus: { atk: 6, hp: 20 } },
+    { id: 'atk-8', name: 'Exploit Weakness', cost: 5, bonus: { crit: 4 } },
+    { id: 'atk-9', name: 'Grand Master', cost: 6, bonus: { atk: 10, crit: 3 } },
+    { id: 'atk-10', name: 'Relentless', cost: 6, bonus: { atk: 12 } },
   ];
+  const defenseSkills = [
+    { id: 'def-1', name: 'Sturdy Frame', cost: 1, bonus: { hp: 10 } },
+    { id: 'def-2', name: 'Iron Will', cost: 2, bonus: { def: 2 } },
+    { id: 'def-3', name: 'Guardian', cost: 3, bonus: { def: 3, hp: 12 } },
+    { id: 'def-4', name: 'Stone Skin', cost: 4, bonus: { def: 5 } },
+    { id: 'def-5', name: 'Vitality', cost: 3, bonus: { hp: 20 } },
+    { id: 'def-6', name: 'Bulwark', cost: 5, bonus: { def: 8, hp: 20 } },
+    { id: 'def-7', name: 'Second Wind', cost: 5, bonus: { hp: 30 } },
+    { id: 'def-8', name: 'Shield Wall', cost: 6, bonus: { def: 10 } },
+    { id: 'def-9', name: 'Unbreakable', cost: 6, bonus: { def: 8, hp: 40 } },
+    { id: 'def-10', name: 'Aegis', cost: 6, bonus: { def: 12 } },
+  ];
+  const utilitySkills = [
+    { id: 'util-1', name: 'Fleet Foot', cost: 2, bonus: { spd: 1 } },
+    { id: 'util-2', name: 'Battle Focus', cost: 3, bonus: { resource: 5 } },
+    { id: 'util-3', name: 'Keen Eye', cost: 3, bonus: { crit: 2 } },
+    { id: 'util-4', name: 'Quickstep', cost: 4, bonus: { spd: 2 } },
+    { id: 'util-5', name: 'Arcane Mind', cost: 4, bonus: { resource: 10 } },
+    { id: 'util-6', name: 'Fortune', cost: 5, bonus: { gold: 0.02 } },
+    { id: 'util-7', name: 'Haste', cost: 5, bonus: { spd: 3 } },
+    { id: 'util-8', name: 'Clarity', cost: 5, bonus: { resource: 12 } },
+    { id: 'util-9', name: 'Alacrity', cost: 6, bonus: { spd: 4 } },
+    { id: 'util-10', name: 'Master Planner', cost: 6, bonus: { resource: 15, crit: 2 } },
+  ];
+
+  const baseTree = [...attackSkills, ...defenseSkills, ...utilitySkills];
 
   let available = JSON.parse(JSON.stringify(baseTree));
 
@@ -935,10 +963,12 @@ function renderHotbar() {
   classSkills.forEach((skill, idx) => {
     const btn = document.createElement('button');
     btn.textContent = `${skill.name} (-${skill.cost})`;
+    btn.title = `Cost ${skill.cost} | Mult ${skill.multiplier}`;
     const cdLeft = state.cooldowns.combat[skill.id] ? Math.max(0, state.cooldowns.combat[skill.id] - now) : 0;
     const insufficient = state.player.resource < skill.cost;
     btn.disabled = cdLeft > 0 || insufficient;
     btn.addEventListener('click', () => CombatSystem.playerAction('skill', skill));
+    btn.addEventListener('touchstart', () => UI.addLog(`${skill.name}: Cost ${skill.cost}, Mult ${skill.multiplier}`), { passive: true });
     if (cdLeft > 0) {
       const overlay = document.createElement('div');
       overlay.className = 'cooldown-overlay';
@@ -950,6 +980,7 @@ function renderHotbar() {
     if (hardBtn) {
       hardBtn.textContent = skill.name;
       hardBtn.disabled = btn.disabled;
+      hardBtn.title = btn.title;
     }
   });
 }
@@ -1081,6 +1112,16 @@ function renderInventory() {
 
   document.getElementById('sellAllBtn').onclick = () => Inventory.sellAll(active);
   document.getElementById('sellSelectedBtn').onclick = () => UI.addLog('Select an item by ID to sell via button.');
+  document.getElementById('usePotionBtn').onclick = () => {
+    if ((state.inventory.consumables.Potion || 0) > 0) {
+      state.inventory.consumables.Potion -= 1;
+      state.player.hp = Utils.clamp(state.player.hp + 60, 0, state.player.maxHp);
+      UI.addLog('Used potion outside combat.');
+      render();
+    } else {
+      UI.addLog('No potions available.');
+    }
+  };
 
   renderFuseFilters();
 }
@@ -1114,12 +1155,23 @@ function renderSkillTree() {
   const container = document.getElementById('skillTreeInfo');
   container.innerHTML = `<div>Skill Points: ${state.player.skillPoints}</div>`;
   const list = SkillTreeSystem.getAvailable().filter(s => !state.player.purchasedSkills.includes(s.id));
-  list.forEach(skill => {
-    const btn = document.createElement('button');
-    const bonusText = Object.entries(skill.bonus).map(([k,v]) => `${k.toUpperCase()} ${v>0?'+':''}${v}`).join(' | ');
-    btn.textContent = `${skill.name} (${bonusText}) (Cost ${skill.cost})`;
-    btn.addEventListener('click', () => { SkillTreeSystem.purchase(skill.id); render(); });
-    container.appendChild(btn);
+  const segments = [
+    { title: 'Attack', filter: id => id.startsWith('atk-') },
+    { title: 'Defense', filter: id => id.startsWith('def-') },
+    { title: 'Utility', filter: id => id.startsWith('util-') },
+  ];
+  segments.forEach(seg => {
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = `<details open><summary>${seg.title}</summary><div class="skills seg-${seg.title}"></div></details>`;
+    const slot = wrapper.querySelector('.skills');
+    list.filter(s => seg.filter(s.id)).forEach(skill => {
+      const btn = document.createElement('button');
+      const bonusText = Object.entries(skill.bonus).map(([k,v]) => `${k.toUpperCase()} ${v>0?'+':''}${v}`).join(' | ');
+      btn.textContent = `${skill.name} (${bonusText}) (Cost ${skill.cost})`;
+      btn.addEventListener('click', () => { SkillTreeSystem.purchase(skill.id); render(); });
+      slot.appendChild(btn);
+    });
+    container.appendChild(wrapper);
   });
 }
 
@@ -1211,6 +1263,8 @@ function renderDragons() {
 
 function renderShop() {
   const list = document.getElementById('shopList');
+  const goldEl = document.getElementById('shopGold');
+  if (goldEl) goldEl.textContent = state.player.gold;
   list.innerHTML = '';
   GameData.shop.forEach(item => {
     const div = document.createElement('div');
