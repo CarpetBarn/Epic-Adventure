@@ -42,9 +42,21 @@ const GameData = (() => {
     rarityBonus: i * 5,
   }));
 
+  const skillNames = {
+    War: ['Power Slash','War Shout','Cleave'],
+    Rog: ['Quick Stab','Flurry','Smoke Bomb'],
+    Mag: ['Arcane Bolt','Frost Nova','Barrier'],
+    Cle: ['Smite','Blessing','Radiance'],
+    Ran: ['Aimed Shot','Volley','Snare Trap'],
+    Pal: ['Holy Strike','Ward','Judgment'],
+    Nec: ['Life Drain','Bone Spear','Raise Army'],
+    Bar: ['Inspiring Tune','Piercing Note','Encore'],
+    Mon: ['Palm Strike','Chi Burst','Serenity'],
+  };
+
   const makeSkills = (prefix, baseCost, baseCd, baseMult) => Array.from({ length: 20 }).map((_, i) => ({
     id: `${prefix}-${i+1}`,
-    name: `${prefix} Skill ${i+1}`,
+    name: skillNames[prefix]?.[i] || `${prefix} Skill ${i+1}`,
     cost: baseCost + Math.floor(i/2) * 3,
     cooldown: baseCd + Math.floor(i/3),
     multiplier: Number((baseMult + i * 0.08).toFixed(2)),
@@ -134,6 +146,7 @@ const initialState = () => {
       ascension: { level: 0, bonuses: { atk: 0, hp: 0, gold: 0 } },
       purchasedSkills: [],
       equipment: { weapon: null, armor: null, helmet: null, boots: null, accessory: null },
+      skillBonuses: { atk:0, def:0, hp:0, crit:0, spd:0, resource:0, gold:0 },
     },
     settings: { uiScale: 1, animations: 'on', lootFilter: 'normal', colorblind: false, forceMobile: false },
     inventory: { gear: [], materials: {}, gems: {}, consumables: {} },
@@ -143,6 +156,7 @@ const initialState = () => {
     current: { zone: 1, enemy: null, inDungeon: false, dungeonFights: 0, lastAction: null, healUses: 2, healCooldown: 0 },
     log: [],
     lifeSkills: {},
+    ui: { fuse: { slot: null, tier: '', rarity: '' } },
   };
 };
 
@@ -287,13 +301,13 @@ const Player = (() => {
       gearBonus.hp += g.stats.hp;
       (g.gems || []).forEach(gem => { if (gem.bonus.atk) gearBonus.atk += gem.bonus.atk; });
     });
-    state.player.maxHp = Math.floor(cls.hp * levelBonus + state.player.ascension.bonuses.hp + gearBonus.hp);
-    state.player.resourceMax = cls.resource.max;
+    state.player.maxHp = Math.floor(cls.hp * levelBonus + state.player.ascension.bonuses.hp + (state.player.skillBonuses?.hp || 0) + gearBonus.hp);
+    state.player.resourceMax = cls.resource.max + (state.player.skillBonuses?.resource || 0);
     state.player.stats = {
-      atk: Math.floor(cls.atk * levelBonus + state.player.ascension.bonuses.atk + gearBonus.atk),
-      def: Math.floor(cls.def * levelBonus + gearBonus.def),
-      crit: cls.crit + gearBonus.crit,
-      spd: cls.spd,
+      atk: Math.floor(cls.atk * levelBonus + state.player.ascension.bonuses.atk + (state.player.skillBonuses?.atk || 0) + gearBonus.atk),
+      def: Math.floor(cls.def * levelBonus + (state.player.skillBonuses?.def || 0) + gearBonus.def),
+      crit: cls.crit + (state.player.skillBonuses?.crit || 0) + gearBonus.crit,
+      spd: cls.spd + (state.player.skillBonuses?.spd || 0),
     };
     if (state.player.hp > state.player.maxHp) state.player.hp = state.player.maxHp;
     if (state.player.resource > state.player.resourceMax) state.player.resource = state.player.resourceMax;
@@ -313,7 +327,7 @@ const Player = (() => {
   };
 
   const addGold = (amount) => {
-    const bonus = 1 + state.player.ascension.bonuses.gold;
+    const bonus = 1 + state.player.ascension.bonuses.gold + (state.player.skillBonuses?.gold || 0);
     state.player.gold = Math.max(0, state.player.gold + Math.floor(amount * bonus));
   };
 
@@ -758,31 +772,80 @@ const DragonSystem = (() => {
 })();
 
 const SkillTreeSystem = (() => {
-  const branches = ['Offense','Defense','Utility'];
-  const skills = branches.reduce((acc, branch) => {
-    acc[branch] = [
-      { id: `${branch}-1`, name: `${branch} Boost I`, cost: 1, bonus: 0.04 },
-      { id: `${branch}-2`, name: `${branch} Boost II`, cost: 2, bonus: 0.06 },
-      { id: `${branch}-3`, name: `${branch} Boost III`, cost: 3, bonus: 0.08 },
-    ];
-    return acc;
-  }, {});
+  const baseTree = [
+    { id: 'st-1', name: 'Power Training', cost: 1, bonus: { atk: 2 } },
+    { id: 'st-2', name: 'Sturdy Frame', cost: 1, bonus: { hp: 10 } },
+    { id: 'st-3', name: 'Iron Will', cost: 2, bonus: { def: 2 } },
+    { id: 'st-4', name: 'Sharpened Edge', cost: 2, bonus: { crit: 1 } },
+    { id: 'st-5', name: 'Fleet Foot', cost: 2, bonus: { spd: 1 } },
+    { id: 'st-6', name: 'Battle Focus', cost: 3, bonus: { resource: 5 } },
+    { id: 'st-7', name: 'Berserker', cost: 3, bonus: { atk: 4, hp: -5 } },
+    { id: 'st-8', name: 'Guardian', cost: 3, bonus: { def: 3, hp: 12 } },
+    { id: 'st-9', name: 'Keen Eye', cost: 3, bonus: { crit: 2 } },
+    { id: 'st-10', name: 'Vitality', cost: 3, bonus: { hp: 20 } },
+    { id: 'st-11', name: 'Weapon Mastery', cost: 4, bonus: { atk: 6 } },
+    { id: 'st-12', name: 'Stone Skin', cost: 4, bonus: { def: 5 } },
+    { id: 'st-13', name: 'Arcane Mind', cost: 4, bonus: { resource: 10 } },
+    { id: 'st-14', name: 'Precision', cost: 4, bonus: { crit: 3 } },
+    { id: 'st-15', name: 'Quickstep', cost: 4, bonus: { spd: 2 } },
+    { id: 'st-16', name: 'Fortune', cost: 5, bonus: { gold: 0.02 } },
+    { id: 'st-17', name: 'Bloodlust', cost: 5, bonus: { atk: 8, hp: -10 } },
+    { id: 'st-18', name: 'Aegis', cost: 5, bonus: { def: 8 } },
+    { id: 'st-19', name: 'Juggernaut', cost: 5, bonus: { hp: 35 } },
+    { id: 'st-20', name: 'Grand Master', cost: 6, bonus: { atk: 10, def: 5, hp: 40, crit: 3 } },
+  ];
+
+  let available = JSON.parse(JSON.stringify(baseTree));
+
+  const applyBonus = (bonus) => {
+    state.player.skillBonuses = state.player.skillBonuses || { atk:0, def:0, hp:0, crit:0, spd:0, resource:0, gold:0 };
+    Object.entries(bonus).forEach(([k,v]) => {
+      state.player.skillBonuses[k] = (state.player.skillBonuses[k] || 0) + v;
+    });
+  };
 
   const purchase = (id) => {
-    const branch = Object.keys(skills).find(b => skills[b].some(s => s.id === id));
-    if (!branch) return;
-    const skill = skills[branch].find(s => s.id === id);
+    const skill = available.find(s => s.id === id);
     if (!skill) return;
     if (state.player.skillPoints < skill.cost) return UI.addLog('Not enough skill points');
     state.player.skillPoints -= skill.cost;
     state.player.purchasedSkills.push(id);
-    skills[branch] = skills[branch].filter(s => s.id !== id);
-    state.player.ascension.bonuses.atk += Math.floor(skill.bonus * 10);
+    available = available.filter(s => s.id !== id);
+    applyBonus(skill.bonus);
     Player.refreshStats();
     UI.addLog(`Purchased ${skill.name}`);
   };
 
-  return { branches, skills, purchase };
+  const respec = (cost=250) => {
+    if (state.player.gold < cost) return UI.addLog('Not enough gold to respec');
+    const spent = state.player.purchasedSkills.reduce((sum, id) => {
+      const s = baseTree.find(b => b.id === id);
+      return sum + (s?.cost || 0);
+    }, 0);
+    state.player.gold -= cost;
+    state.player.skillPoints += spent;
+    state.player.purchasedSkills = [];
+    state.player.skillBonuses = { atk:0, def:0, hp:0, crit:0, spd:0, resource:0, gold:0 };
+    available = JSON.parse(JSON.stringify(baseTree));
+    Player.refreshStats();
+    UI.addLog('Skill tree respecced.');
+  };
+
+  const getAvailable = () => available;
+  const getBase = () => baseTree;
+  const initFromState = () => {
+    available = JSON.parse(JSON.stringify(baseTree));
+    state.player.skillBonuses = { atk:0, def:0, hp:0, crit:0, spd:0, resource:0, gold:0 };
+    (state.player.purchasedSkills || []).forEach(id => {
+      const skill = available.find(s => s.id === id);
+      if (skill) {
+        applyBonus(skill.bonus);
+        available = available.filter(s => s.id !== id);
+      }
+    });
+  };
+
+  return { purchase, respec, getAvailable, getBase, initFromState };
 })();
 
 const AscensionSystem = (() => {
@@ -868,7 +931,7 @@ function renderHotbar() {
   const hotbar = document.getElementById('skillHotbar');
   hotbar.innerHTML = '';
   const now = Date.now();
-  const classSkills = GameData.skills[state.player.class];
+  const classSkills = GameData.skills[state.player.class].slice(0,3);
   classSkills.forEach((skill, idx) => {
     const btn = document.createElement('button');
     btn.textContent = `${skill.name} (-${skill.cost})`;
@@ -961,17 +1024,47 @@ function renderInventory() {
   if (active === 'All' || active === 'Gems') items.push(...Object.values(state.inventory.gems).map(g => ({ type:'gem', data:g })));
   if (active === 'All' || active === 'Consumables') items.push(...Object.entries(state.inventory.consumables).map(([k,v]) => ({ type:'consumable', data:{ name:k, amount:v } })));
 
+  const eqEl = document.getElementById('equippedSummary');
+  const equipSlots = ['weapon','armor','helmet','boots','accessory'];
+  eqEl.innerHTML = equipSlots.map(slot => {
+    const eqId = state.player.equipment?.[slot];
+    const item = state.inventory.gear.find(g => g.id === eqId);
+    if (!item) return `<div class="equipped-row"><strong>${slot}:</strong> None equipped</div>`;
+    return `<div class="equipped-row"><strong>${slot}:</strong> ${item.name} (T${item.tier}) — ATK ${item.stats.atk} DEF ${item.stats.def} CRIT ${item.stats.crit} HP ${item.stats.hp}</div>`;
+  }).join('');
+
+  const fuseGearOptions = (slot) => state.inventory.gear.filter(g => (!slot || g.slot === slot) && (!state.ui.fuse.tier || g.tier === Number(state.ui.fuse.tier)) && (!state.ui.fuse.rarity || g.rarity === state.ui.fuse.rarity));
+  const setOptions = (selectId, data, placeholder, formatter) => {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    sel.innerHTML = `<option value="">${placeholder}</option>` + data.map(g => `<option value="${g.id}">${formatter ? formatter(g) : g.name}</option>`).join('');
+  };
+  setOptions('fuseIdA', fuseGearOptions(state.ui.fuse.slot), 'Select Gear A', g => `${g.name} (T${g.tier}) [${g.slot}]`);
+  setOptions('fuseIdB', fuseGearOptions(state.ui.fuse.slot), 'Select Gear B', g => `${g.name} (T${g.tier}) [${g.slot}]`);
+  setOptions('socketGearId', state.inventory.gear, 'Select Gear', g => `${g.name} (T${g.tier}) [${g.slot}]`);
+  setOptions('socketGemId', Object.values(state.inventory.gems), 'Select Gem', g => `${g.name || 'Gem'} (+${g.bonus.atk || 0} ATK)`);
+
   items.forEach(item => {
     const div = document.createElement('div');
     div.className = 'inventory-item';
     if (item.type === 'gear') {
       const g = item.data;
       const equipped = state.player.equipment?.[g.slot] === g.id;
+      const equippedItem = state.inventory.gear.find(x => x.id === state.player.equipment?.[g.slot]);
+      const deltas = equippedItem ? {
+        atk: g.stats.atk - equippedItem.stats.atk,
+        def: g.stats.def - equippedItem.stats.def,
+        crit: g.stats.crit - equippedItem.stats.crit,
+        hp: g.stats.hp - equippedItem.stats.hp,
+      } : null;
+      const deltaText = deltas ? Object.entries(deltas).map(([k,v]) => `${k.toUpperCase()} ${v>=0?'+':''}${v}`).join(' / ') : 'No equipped item';
+      const deltaClass = deltas ? (Object.values(deltas).reduce((a,b)=>a+b,0) >=0 ? 'compare up' : 'compare down') : 'compare';
       div.innerHTML = `
         <div class="rarity-${g.rarity}">${g.name} [${g.slot}] (Tier ${g.tier}) ${equipped ? '<strong>(Equipped)</strong>' : ''}</div>
         <div class="tooltip">ATK ${g.stats.atk} DEF ${g.stats.def} CRIT ${g.stats.crit} HP ${g.stats.hp}</div>
         <div>Item ID: ${g.id}</div>
         <div>Sockets: ${g.sockets} Gems: ${(g.gems||[]).length}</div>
+        <div class="${deltaClass}">Vs equipped: ${deltaText}</div>
         <div class="gear-actions">
           <button data-equip="${g.id}">${equipped ? 'Re-equip' : 'Equip'}</button>
           <button data-sell="${g.id}">Sell</button>
@@ -996,7 +1089,7 @@ function renderFuseFilters() {
   const container = document.getElementById('fuseFilters');
   if (!container.dataset.ready) {
     ['weapon','armor','helmet','boots','accessory'].forEach(slot => {
-      const b = document.createElement('button'); b.textContent = slot; b.addEventListener('click', () => filterFuse(slot)); container.appendChild(b);
+      const b = document.createElement('button'); b.textContent = slot; b.addEventListener('click', () => filterFuse(slot, undefined, undefined)); container.appendChild(b);
     });
     const tierSel = document.createElement('select');
     tierSel.innerHTML = '<option value="">Any Tier</option>' + Array.from({length:5}).map((_,i)=>`<option value="${i+1}">Tier ${i+1}</option>`).join('');
@@ -1009,25 +1102,24 @@ function renderFuseFilters() {
   }
 }
 function filterFuse(slot, tier, rarity) {
-  const list = state.inventory.gear.filter(g => (!slot || g.slot === slot) && (!tier || g.tier === Number(tier)) && (!rarity || g.rarity === rarity));
+  if (slot !== undefined) state.ui.fuse.slot = slot;
+  if (tier !== undefined) state.ui.fuse.tier = tier;
+  if (rarity !== undefined) state.ui.fuse.rarity = rarity;
+  const list = state.inventory.gear.filter(g => (!state.ui.fuse.slot || g.slot === state.ui.fuse.slot) && (!state.ui.fuse.tier || g.tier === Number(state.ui.fuse.tier)) && (!state.ui.fuse.rarity || g.rarity === state.ui.fuse.rarity));
   document.getElementById('fuseResult').textContent = list.map(g => `${g.id} Tier ${g.tier} ${g.rarity}`).join(', ');
+  renderInventory();
 }
 
 function renderSkillTree() {
   const container = document.getElementById('skillTreeInfo');
   container.innerHTML = `<div>Skill Points: ${state.player.skillPoints}</div>`;
-  SkillTreeSystem.branches.forEach(branch => {
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = `<details open><summary>${branch}</summary><div class="skills"></div></details>`;
-    const slot = wrapper.querySelector('.skills');
-    const list = SkillTreeSystem.skills[branch].filter(s => !state.player.purchasedSkills.includes(s.id));
-    list.forEach(skill => {
-      const btn = document.createElement('button');
-      btn.textContent = `${skill.name} (Cost ${skill.cost})`;
-      btn.addEventListener('click', () => { SkillTreeSystem.purchase(skill.id); render(); });
-      slot.appendChild(btn);
-    });
-    container.appendChild(wrapper);
+  const list = SkillTreeSystem.getAvailable().filter(s => !state.player.purchasedSkills.includes(s.id));
+  list.forEach(skill => {
+    const btn = document.createElement('button');
+    const bonusText = Object.entries(skill.bonus).map(([k,v]) => `${k.toUpperCase()} ${v>0?'+':''}${v}`).join(' | ');
+    btn.textContent = `${skill.name} (${bonusText}) (Cost ${skill.cost})`;
+    btn.addEventListener('click', () => { SkillTreeSystem.purchase(skill.id); render(); });
+    container.appendChild(btn);
   });
 }
 
@@ -1199,6 +1291,11 @@ function bindAscend() {
   btn.addEventListener('click', () => { AscensionSystem.ascend(); render(); });
 }
 
+function bindRespec() {
+  const btn = document.getElementById('respecBtn');
+  btn.addEventListener('click', () => { SkillTreeSystem.respec(250); render(); });
+}
+
 function bindSockets() {
   document.getElementById('socketBtn').addEventListener('click', () => {
     const g = document.getElementById('socketGearId').value.trim();
@@ -1228,13 +1325,16 @@ function loadGame() {
       lifeSkills: saved.lifeSkills || {},
       eggs: saved.eggs || [],
       dragons: saved.dragons || [],
+      ui: { ...defaults.ui, ...(saved.ui || {}) },
     };
     state.player.equipment = { ...defaults.player.equipment, ...(saved.player?.equipment || {}) };
+    state.player.skillBonuses = { ...defaults.player.skillBonuses, ...(saved.player?.skillBonuses || {}) };
     // Guard: don't force mobile layout on large screens unless user turns it on this session
     if (state.settings.forceMobile && window.innerWidth > 1024) {
       state.settings.forceMobile = false;
     }
   } else state = defaults;
+  SkillTreeSystem.initFromState();
   Player.refreshStats();
   setupSettings();
   UI.applySettings();
@@ -1262,6 +1362,7 @@ function init() {
   bindCombatButtons();
   bindFusion();
   bindAscend();
+  bindRespec();
   bindSockets();
   registerSW();
   UI.buildMobileBar();

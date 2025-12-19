@@ -200,6 +200,45 @@ button.ghost { background: rgba(255,255,255,0.08); }
 }
 .inventory-item .rarity { font-weight: bold; }
 .inventory-item .tooltip { font-size: 0.9rem; color: var(--muted); }
+.equipped-summary {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+.equipped-row {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0.5rem;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+}
+.compare {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.compare.up { color: #34d399; }
+.compare.down { color: #f87171; }
+
+.fuse-controls,
+.socket-controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.fuse-controls select,
+.socket-controls select {
+  padding: 0.55rem;
+  border-radius: 10px;
+  background: #0b1020;
+  color: white;
+  border: 1px solid rgba(255,255,255,0.1);
+  min-width: 180px;
+}
 
 .filters { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
 .filters button.active { border-color: var(--accent); color: var(--accent); }

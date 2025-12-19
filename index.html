@@ -123,6 +123,7 @@
           <div class="panel">
             <h3>Inventory</h3>
             <div class="filters" id="inventoryFilters"></div>
+            <div id="equippedSummary" class="equipped-summary"></div>
             <div id="inventoryList" class="inventory-list"></div>
             <div class="inventory-actions">
               <button id="sellSelectedBtn">Sell</button>
@@ -133,8 +134,8 @@
             <h3>Fuse Gear</h3>
             <div class="filters" id="fuseFilters"></div>
             <div class="fuse-controls">
-              <input type="text" id="fuseIdA" placeholder="Gear ID A">
-              <input type="text" id="fuseIdB" placeholder="Gear ID B">
+              <select id="fuseIdA"></select>
+              <select id="fuseIdB"></select>
               <button id="fuseBtn">Fuse</button>
             </div>
             <div id="fuseResult"></div>
@@ -142,8 +143,8 @@
           <div class="panel">
             <h3>Gems &amp; Sockets</h3>
             <div class="socket-controls">
-              <input type="text" id="socketGearId" placeholder="Gear ID">
-              <input type="text" id="socketGemId" placeholder="Gem ID">
+              <select id="socketGearId"></select>
+              <select id="socketGemId"></select>
               <button id="socketBtn">Socket Gem</button>
               <button id="removeGemBtn">Remove Gem</button>
             </div>
@@ -155,6 +156,7 @@
           <div class="panel">
             <h3>Skill Trees</h3>
             <button id="ascendBtn">Ascend (Lv 20+)</button>
+            <button id="respecBtn">Respec (250g)</button>
             <div id="skillTreeInfo"></div>
           </div>
         </div>
