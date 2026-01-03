@@ -134,8 +134,13 @@ const Utils = {
   chance(percent) { return Math.random() * 100 < percent; },
 };
 
+const escapeSelector = (value) => {
+  if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(value);
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+};
+
 function getActiveTabRoot(tabId) {
-  const matches = Array.from(document.querySelectorAll(`.tab-content#${CSS.escape(tabId)}`));
+  const matches = Array.from(document.querySelectorAll(`.tab-content#${escapeSelector(tabId)}`));
   if (matches.length > 1) console.warn(`[UI] Duplicate tab-content id="${tabId}" found:`, matches.length);
   return matches.find(el => el.classList.contains('active')) || matches[0] || null;
 }
@@ -217,8 +222,16 @@ const UI = (() => {
     closeNav();
   };
 
-  const openNav = () => { sidebar.classList.add('open'); overlay.classList.add('show'); };
-  const closeNav = () => { sidebar.classList.remove('open'); overlay.classList.remove('show'); };
+  const openNav = () => {
+    sidebar.classList.add('open');
+    overlay.classList.add('show');
+    overlay.style.pointerEvents = 'auto';
+  };
+  const closeNav = () => {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('show');
+    overlay.style.pointerEvents = 'none';
+  };
 
   const updateOrientation = () => {
     const orientation = window.innerWidth < window.innerHeight ? 'portrait' : 'landscape';
@@ -1132,16 +1145,19 @@ function renderInventory() {
 
   document.getElementById('sellAllBtn').onclick = () => Inventory.sellAll(active);
   document.getElementById('sellSelectedBtn').onclick = () => UI.addLog('Select an item by ID to sell via button.');
-  document.getElementById('usePotionBtn').onclick = () => {
-    if ((state.inventory.consumables.Potion || 0) > 0) {
-      state.inventory.consumables.Potion -= 1;
-      state.player.hp = Utils.clamp(state.player.hp + 60, 0, state.player.maxHp);
-      UI.addLog('Used potion outside combat.');
-      render();
-    } else {
-      UI.addLog('No potions available.');
-    }
-  };
+  const usePotionBtn = document.getElementById('usePotionBtn');
+  if (usePotionBtn) {
+    usePotionBtn.onclick = () => {
+      if ((state.inventory.consumables.Potion || 0) > 0) {
+        state.inventory.consumables.Potion -= 1;
+        state.player.hp = Utils.clamp(state.player.hp + 60, 0, state.player.maxHp);
+        UI.addLog('Used potion outside combat.');
+        render();
+      } else {
+        UI.addLog('No potions available.');
+      }
+    };
+  }
 
   renderFuseFilters();
 }
@@ -1227,8 +1243,6 @@ function renderLifeSkills() {
     list.appendChild(card);
   });
 
-  const epicList = document.getElementById('epicActionList');
-  if (!epicList) return;
   epicList.innerHTML = '';
   GameData.epicActions.forEach(action => {
     const cd = state.cooldowns.epic[action.id];
@@ -1457,6 +1471,8 @@ function init() {
   UI.buildMobileBar();
   UI.buildMobileNav();
   UI.updateOrientation();
+  const overlay = document.getElementById('navOverlay');
+  if (overlay) overlay.style.pointerEvents = 'none';
   render();
   persistLoop();
   tick();
