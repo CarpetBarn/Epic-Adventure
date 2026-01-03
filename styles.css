@@ -256,6 +256,7 @@ button.ghost { background: rgba(255,255,255,0.08); }
   inset: 0;
   background: rgba(0,0,0,0.55);
   z-index: 5;
+  pointer-events: none;
 }
 
 .hamburger-global {
@@ -398,8 +399,12 @@ body:not(.force-mobile) .mobile-combat-bar { display: none; }
     background: rgba(0,0,0,0.6);
     z-index: 900;
     display: none;
+    pointer-events: none;
   }
-  .nav-overlay.show { display: block; }
+  .nav-overlay.show {
+    display: block;
+    pointer-events: auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
