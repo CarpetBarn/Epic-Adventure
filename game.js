@@ -134,13 +134,8 @@ const Utils = {
   chance(percent) { return Math.random() * 100 < percent; },
 };
 
-const escapeSelector = (value) => {
-  if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(value);
-  return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
-};
-
 function getActiveTabRoot(tabId) {
-  const matches = Array.from(document.querySelectorAll(`.tab-content#${escapeSelector(tabId)}`));
+  const matches = Array.from(document.querySelectorAll(`.tab-content#${CSS.escape(tabId)}`));
   if (matches.length > 1) console.warn(`[UI] Duplicate tab-content id="${tabId}" found:`, matches.length);
   return matches.find(el => el.classList.contains('active')) || matches[0] || null;
 }
@@ -222,16 +217,8 @@ const UI = (() => {
     closeNav();
   };
 
-  const openNav = () => {
-    sidebar.classList.add('open');
-    overlay.classList.add('show');
-    overlay.style.pointerEvents = 'auto';
-  };
-  const closeNav = () => {
-    sidebar.classList.remove('open');
-    overlay.classList.remove('show');
-    overlay.style.pointerEvents = 'none';
-  };
+  const openNav = () => { sidebar.classList.add('open'); overlay.classList.add('show'); };
+  const closeNav = () => { sidebar.classList.remove('open'); overlay.classList.remove('show'); };
 
   const updateOrientation = () => {
     const orientation = window.innerWidth < window.innerHeight ? 'portrait' : 'landscape';
@@ -1470,8 +1457,6 @@ function init() {
   UI.buildMobileBar();
   UI.buildMobileNav();
   UI.updateOrientation();
-  const overlay = document.getElementById('navOverlay');
-  if (overlay) overlay.style.pointerEvents = 'none';
   render();
   persistLoop();
   tick();
