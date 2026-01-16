@@ -9,8 +9,8 @@
   --danger: #ff6b6b;
   --success: #4cd97b;
   --scale: 1;
-  --nav-width: 260px;
-  --nav-collapsed: 82px;
+  --nav-width: 220px;
+  --nav-collapsed: 70px;
   --radius: 14px;
   --shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
 }
@@ -130,12 +130,12 @@ body[data-nav="collapsed"] .brand {
 .log {
   background: var(--panel-light);
   border-radius: var(--radius);
-  padding: 12px;
+  padding: 10px;
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 280px;
+  gap: 6px;
+  max-height: 200px;
   overflow: hidden;
 }
 
@@ -420,7 +420,7 @@ body[data-nav="drawer"] .overlay {
     top: 0;
     bottom: 0;
     height: 100vh;
-    width: 80vw;
+    width: 72vw;
     max-width: 320px;
     transition: left 0.25s ease;
   }
