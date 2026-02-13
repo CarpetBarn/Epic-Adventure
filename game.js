@@ -286,7 +286,8 @@ const defaultState = (selectedClass = "Warrior") => {
         animations: true,
         lootFilterMode: "normal",
         colorblind: false,
-        mobileLayout: false
+        mobileLayout: false,
+        compactNav: true
       }
     },
     enemy: null,
@@ -335,6 +336,7 @@ const ui = {
   zoneInfo: document.getElementById("zoneInfo"),
   inventoryList: document.getElementById("inventoryList"),
   inventoryFilter: document.getElementById("inventoryFilter"),
+  inventorySort: document.getElementById("inventorySort"),
   sellAll: document.getElementById("sellAll"),
   skillTree: document.getElementById("skillTree"),
   lifeSkills: document.getElementById("lifeSkills"),
@@ -348,6 +350,7 @@ const ui = {
   toggleColorblind: document.getElementById("toggleColorblind"),
   lootFilterMode: document.getElementById("lootFilterMode"),
   toggleMobileLayout: document.getElementById("toggleMobileLayout"),
+  toggleCompactNav: document.getElementById("toggleCompactNav"),
   newGameClass: document.getElementById("newGameClass"),
   startNewGame: document.getElementById("startNewGame"),
   resetSave: document.getElementById("resetSave"),
@@ -433,18 +436,39 @@ function debounce(fn, wait) {
   };
 }
 
+function ensureStateIntegrity() {
+  state.inventory.gear = (state.inventory.gear || []).map((gear) => ({
+    ...gear,
+    gems: Array.isArray(gear.gems) ? gear.gems : [],
+    locked: Boolean(gear.locked)
+  }));
+}
+
+function activeTabName() {
+  const activePanel = document.querySelector(".panel.active");
+  return activePanel ? activePanel.id.replace("panel-", "") : "combat";
+}
+
+function renderActivePanel() {
+  const tab = activeTabName();
+  if (tab === "combat") renderCombat();
+  if (tab === "zones") renderZones();
+  if (tab === "inventory") {
+    renderInventory();
+    renderFusionFilters();
+  }
+  if (tab === "skills") renderSkillTree();
+  if (tab === "life") renderLifeSkills();
+  if (tab === "dragons") renderDragons();
+  if (tab === "shop") renderShop();
+  if (tab === "settings") renderSettings();
+}
+
 function updateAll() {
   applySettings();
   updatePlayerMeta();
   renderCombat();
-  renderZones();
-  renderInventory();
-  renderSkillTree();
-  renderLifeSkills();
-  renderDragons();
-  renderShop();
-  renderSettings();
-  renderFusionFilters();
+  renderActivePanel();
   debouncedSave();
 }
 
@@ -457,6 +481,7 @@ function applySettings() {
   document.documentElement.style.setProperty("--scale", finalScale);
   document.body.dataset.theme = state.player.settings.colorblind ? "colorblind" : "dark";
   document.body.dataset.nav = state.player.settings.mobileLayout ? "drawer" : document.body.dataset.nav;
+  document.body.dataset.navstyle = state.player.settings.compactNav ? "compact" : "cozy";
   document.body.classList.toggle("no-anim", !state.player.settings.animations);
 }
 
@@ -625,15 +650,16 @@ function renderInventory() {
         const canSocket = state.inventory.gems.some((gem) => gem.qty > 0);
         const canRemove = item.gearTier >= 4 && item.gems.length > 0;
         return `
-          <div class="inventory-item" data-item="${item.id}">
+          <div class="inventory-item ${item.locked ? "locked" : ""}" data-item="${item.id}">
             <div class="meta">
-              <strong class="rarity" style="color:${item.color}">${item.name}</strong>
+              <strong class="rarity" style="color:${item.color}">${item.name}${item.locked ? " 🔒" : ""}</strong>
               <span class="tooltip">${item.rarity} • Tier ${item.gearTier} • iLvl ${item.itemLevel}</span>
               <span class="tooltip">${gearStatLine(item)}${item.gems.length ? ` • Gems: ${item.gems.map((gem) => gem.name).join(", ")}` : ""}</span>
             </div>
             <div>
-              <button class="secondary" data-equip="${item.id}">Equip</button>
-              <button class="secondary" data-sell="${item.id}">Sell</button>
+              <button class="secondary" data-lock="${item.id}">${item.locked ? "Unlock" : "Lock"}</button>
+              <button class="secondary" data-equip="${item.id}" ${item.locked ? "disabled" : ""}>Equip</button>
+              <button class="secondary" data-sell="${item.id}" ${item.locked ? "disabled" : ""}>Sell</button>
               ${canSocket ? `<button class="secondary" data-socket="${item.id}">Socket Gem</button>` : ""}
               ${canRemove ? `<button class="secondary" data-remove-gem="${item.id}">Remove Gem</button>` : ""}
             </div>
@@ -784,10 +810,12 @@ function renderShop() {
 }
 
 function renderSettings() {
-  const classOptions = Object.keys(GameData.classes)
-    .map((className) => `<option value="${className}">${className}</option>`)
-    .join("");
-  ui.newGameClass.innerHTML = classOptions;
+  if (ui.newGameClass.options.length === 0) {
+    const classOptions = Object.keys(GameData.classes)
+      .map((className) => `<option value="${className}">${className}</option>`)
+      .join("");
+    ui.newGameClass.innerHTML = classOptions;
+  }
   ui.newGameClass.value = state.player.class;
   ui.uiScale.value = state.player.settings.uiScale;
   ui.customScale.value = String(state.player.settings.customScale || 100);
@@ -797,21 +825,28 @@ function renderSettings() {
   ui.toggleColorblind.checked = state.player.settings.colorblind;
   ui.lootFilterMode.value = state.player.settings.lootFilterMode;
   ui.toggleMobileLayout.checked = state.player.settings.mobileLayout;
+  ui.toggleCompactNav.checked = state.player.settings.compactNav;
 }
 
 function renderFusionFilters() {
   const slotValue = ui.fusionSlot.value || "all";
   const tierValue = ui.fusionTier.value || "all";
   const rarityValue = ui.fusionRarity.value || "all";
-  ui.fusionSlot.innerHTML = ["all", "weapon", "armor", "helmet", "boots", "accessory"]
-    .map((slot) => `<option value="${slot}">${slot}</option>`)
-    .join("");
-  ui.fusionTier.innerHTML = ["all", 1, 2, 3, 4, 5]
-    .map((tier) => `<option value="${tier}">Tier ${tier}</option>`)
-    .join("");
-  ui.fusionRarity.innerHTML = ["all", ...GameData.rarities.map((r) => r.name.toLowerCase())]
-    .map((rarity) => `<option value="${rarity}">${rarity}</option>`)
-    .join("");
+  if (ui.fusionSlot.options.length === 0) {
+    ui.fusionSlot.innerHTML = ["all", "weapon", "armor", "helmet", "boots", "accessory"]
+      .map((slot) => `<option value="${slot}">${slot}</option>`)
+      .join("");
+  }
+  if (ui.fusionTier.options.length === 0) {
+    ui.fusionTier.innerHTML = ["all", 1, 2, 3, 4, 5]
+      .map((tier) => `<option value="${tier}">Tier ${tier}</option>`)
+      .join("");
+  }
+  if (ui.fusionRarity.options.length === 0) {
+    ui.fusionRarity.innerHTML = ["all", ...GameData.rarities.map((r) => r.name.toLowerCase())]
+      .map((rarity) => `<option value="${rarity}">${rarity}</option>`)
+      .join("");
+  }
   ui.fusionSlot.value = slotValue;
   ui.fusionTier.value = tierValue;
   ui.fusionRarity.value = rarityValue;
@@ -827,7 +862,7 @@ function renderFusionSelection() {
           <strong style="color:${item.color}">${item.name}</strong>
           <span class="tooltip">${item.rarity} • Tier ${item.gearTier}</span>
         </div>
-        <button class="secondary" data-fuse-select="${item.id}">${state.selectedFusion.includes(item.id) ? "Selected" : "Select"}</button>
+        <button class="secondary" data-fuse-select="${item.id}" ${item.locked ? "disabled" : ""}>${item.locked ? "Locked" : (state.selectedFusion.includes(item.id) ? "Selected" : "Select")}</button>
       </div>
     `)
     .join("");
@@ -848,7 +883,8 @@ function filterFusionItem(item) {
 function getInventoryItems(filter) {
   const items = [];
   if (filter === "all" || filter === "gear") {
-    items.push(...state.inventory.gear.map((item) => ({ ...item, type: "gear" })));
+    const gearItems = state.inventory.gear.map((item) => ({ ...item, type: "gear" }));
+    items.push(...sortGearItems(gearItems));
   }
   if (filter === "all" || filter === "materials") {
     items.push(...state.inventory.materials.map((item) => ({ ...item, type: "materials" })));
@@ -866,6 +902,22 @@ function getInventoryItems(filter) {
     items.push(...state.inventory.dragons.map((item) => ({ ...item, type: "dragons" })));
   }
   return items;
+}
+
+
+function sortGearItems(gearItems) {
+  const mode = ui.inventorySort?.value || "default";
+  if (mode === "default") return gearItems;
+  const rarityRank = Object.fromEntries(GameData.rarities.map((r, i) => [r.name, i]));
+  const sorted = [...gearItems];
+  sorted.sort((a, b) => {
+    if (mode === "rarity") return (rarityRank[b.rarity] || 0) - (rarityRank[a.rarity] || 0);
+    if (mode === "tier") return b.gearTier - a.gearTier;
+    if (mode === "ilevel") return b.itemLevel - a.itemLevel;
+    if (mode === "name") return a.name.localeCompare(b.name);
+    return 0;
+  });
+  return sorted;
 }
 
 function currentZone() {
@@ -1121,7 +1173,8 @@ function generateGear(zoneId) {
     gearTier,
     itemLevel,
     stats,
-    gems: []
+    gems: [],
+    locked: false
   };
 }
 
@@ -1292,7 +1345,12 @@ function equipItem(itemId) {
 function sellItem(itemId) {
   const index = state.inventory.gear.findIndex((gear) => gear.id === itemId);
   if (index >= 0) {
-    const [item] = state.inventory.gear.splice(index, 1);
+    const item = state.inventory.gear[index];
+    if (item.locked) {
+      logMessage("Item is locked. Unlock it before selling.");
+      return;
+    }
+    state.inventory.gear.splice(index, 1);
     const value = Math.round(20 + item.gearTier * 10);
     state.player.gold += value;
     logMessage(`${item.name} sold for ${value} gold.`);
@@ -1300,12 +1358,21 @@ function sellItem(itemId) {
   }
 }
 
+function toggleLockItem(itemId) {
+  const item = state.inventory.gear.find((gear) => gear.id === itemId);
+  if (!item) return;
+  item.locked = !item.locked;
+  logMessage(`${item.name} ${item.locked ? "locked" : "unlocked"}.`);
+  updateAll();
+}
+
 function sellAllFiltered() {
   const filter = ui.inventoryFilter.value || "all";
   if (filter === "gear" || filter === "all") {
-    const sellable = state.player.settings.lootFilterMode === "strict"
+    const basePool = state.player.settings.lootFilterMode === "strict"
       ? state.inventory.gear.filter((item) => ["Common", "Uncommon"].includes(item.rarity))
       : state.inventory.gear;
+    const sellable = basePool.filter((item) => !item.locked);
     const value = sellable.reduce((sum, item) => sum + Math.round(20 + item.gearTier * 10), 0);
     state.inventory.gear = state.inventory.gear.filter((item) => !sellable.includes(item));
     state.player.gold += value;
@@ -1448,6 +1515,10 @@ function handleFusion() {
   }
   const [first, second] = state.selectedFusion.map((id) => state.inventory.gear.find((gear) => gear.id === id));
   if (!first || !second) return;
+  if (first.locked || second.locked) {
+    logMessage("Unlock items before fusion.");
+    return;
+  }
   if (first.slot !== second.slot || first.gearTier !== second.gearTier) {
     logMessage("Fusion requires same slot and tier.");
     return;
@@ -1515,6 +1586,7 @@ function switchTab(tab) {
   document.querySelector(`.tab-button[data-tab="${tab}"]`).classList.add("active");
   if (tab !== "combat") ui.mobileActionBar.style.display = "none";
   else ui.mobileActionBar.style.display = "";
+  renderActivePanel();
   closeDrawer();
 }
 
@@ -1527,6 +1599,7 @@ function handleSettingsChange() {
   state.player.settings.colorblind = ui.toggleColorblind.checked;
   state.player.settings.lootFilterMode = ui.lootFilterMode.value;
   state.player.settings.mobileLayout = ui.toggleMobileLayout.checked;
+  state.player.settings.compactNav = ui.toggleCompactNav.checked;
   updateAll();
 }
 
@@ -1642,6 +1715,11 @@ function setupEventListeners() {
       sellItem(sellButton.dataset.sell);
       return;
     }
+    const lockButton = event.target.closest("button[data-lock]");
+    if (lockButton) {
+      toggleLockItem(lockButton.dataset.lock);
+      return;
+    }
     const releaseButton = event.target.closest("button[data-release]");
     if (releaseButton) {
       releaseDragon(releaseButton.dataset.release);
@@ -1717,6 +1795,7 @@ function setupEventListeners() {
 
   ui.navToggle.addEventListener("click", handleNavToggle);
   ui.inventoryFilter.addEventListener("change", renderInventory);
+  ui.inventorySort.addEventListener("change", renderInventory);
   ui.sellAll.addEventListener("click", sellAllFiltered);
   ui.startNewGame.addEventListener("click", startNewGame);
   ui.resetSave.addEventListener("click", resetSave);
@@ -1727,6 +1806,7 @@ function setupEventListeners() {
   ui.toggleColorblind.addEventListener("change", handleSettingsChange);
   ui.lootFilterMode.addEventListener("change", handleSettingsChange);
   ui.toggleMobileLayout.addEventListener("change", handleSettingsChange);
+  ui.toggleCompactNav.addEventListener("change", handleSettingsChange);
   ui.navOverlay.addEventListener("click", closeDrawer);
   ui.fusionSlot.addEventListener("change", renderFusionSelection);
   ui.fusionTier.addEventListener("change", renderFusionSelection);
@@ -1739,6 +1819,7 @@ function setupEventListeners() {
 }
 
 function initGame() {
+  ensureStateIntegrity();
   updateOrientation();
   setupEventListeners();
   registerServiceWorker();

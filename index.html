@@ -108,6 +108,13 @@
               <option value="eggs">Eggs</option>
               <option value="dragons">Dragons</option>
             </select>
+            <select id="inventorySort">
+              <option value="default">Sort: Default</option>
+              <option value="rarity">Sort: Rarity</option>
+              <option value="tier">Sort: Tier</option>
+              <option value="ilevel">Sort: Item Level</option>
+              <option value="name">Sort: Name</option>
+            </select>
             <button id="sellAll" class="secondary">Sell All</button>
           </div>
           <div id="inventoryList" class="inventory-list"></div>
@@ -187,6 +194,7 @@
               </select>
             </label>
             <label><input type="checkbox" id="toggleMobileLayout" /> Force Mobile Layout</label>
+            <label><input type="checkbox" id="toggleCompactNav" /> Compact Navigation</label>
             <label>New Game Class
               <select id="newGameClass"></select>
             </label>

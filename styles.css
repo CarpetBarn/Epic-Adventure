@@ -116,8 +116,8 @@ body[data-nav="collapsed"] .nav {
   min-height: 40px;
 }
 
-.tab-button .label,
-.brand {
+body[data-navstyle="compact"] .tab-button .label,
+body[data-navstyle="compact"] .brand {
   display: none;
 }
 
@@ -134,6 +134,23 @@ body[data-nav="collapsed"] .tab-button .label,
 body[data-nav="collapsed"] .brand {
   display: none;
 }
+body[data-navstyle="cozy"] .nav {
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+  flex-basis: 220px;
+}
+
+body[data-navstyle="cozy"] .tab-button {
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+body[data-navstyle="cozy"] .tab-button .label,
+body[data-navstyle="cozy"] .brand {
+  display: inline;
+}
+
 
 .log {
   background: var(--panel-light);
@@ -346,6 +363,10 @@ button.action[disabled] {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.inventory-item.locked {
+  border: 1px solid rgba(255, 183, 71, 0.6);
 }
 
 .tooltip {
