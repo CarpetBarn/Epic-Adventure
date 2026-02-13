@@ -254,8 +254,8 @@ const GameData = {
   ]
 };
 
-const defaultState = () => {
-  const playerClass = "Warrior";
+const defaultState = (selectedClass = "Warrior") => {
+  const playerClass = GameData.classes[selectedClass] ? selectedClass : "Warrior";
   const classData = GameData.classes[playerClass];
   return {
     player: {
@@ -348,6 +348,8 @@ const ui = {
   toggleColorblind: document.getElementById("toggleColorblind"),
   lootFilterMode: document.getElementById("lootFilterMode"),
   toggleMobileLayout: document.getElementById("toggleMobileLayout"),
+  newGameClass: document.getElementById("newGameClass"),
+  startNewGame: document.getElementById("startNewGame"),
   resetSave: document.getElementById("resetSave"),
   mobileActionBar: document.getElementById("mobileActionBar"),
   navToggle: document.getElementById("navToggle"),
@@ -782,6 +784,11 @@ function renderShop() {
 }
 
 function renderSettings() {
+  const classOptions = Object.keys(GameData.classes)
+    .map((className) => `<option value="${className}">${className}</option>`)
+    .join("");
+  ui.newGameClass.innerHTML = classOptions;
+  ui.newGameClass.value = state.player.class;
   ui.uiScale.value = state.player.settings.uiScale;
   ui.customScale.value = String(state.player.settings.customScale || 100);
   ui.customScaleValue.textContent = `${ui.customScale.value}%`;
@@ -1525,8 +1532,19 @@ function handleSettingsChange() {
 
 function resetSave() {
   if (!confirm("Reset all progress?")) return;
+  const selectedClass = ui.newGameClass.value;
   localStorage.removeItem("epicAdventureSave");
-  state = defaultState();
+  state = defaultState(selectedClass);
+  logMessage(`New ${selectedClass} created.`);
+  updateAll();
+}
+
+function startNewGame() {
+  if (!confirm("Start a new game with the selected class? Current progress will be erased.")) return;
+  const selectedClass = ui.newGameClass.value;
+  localStorage.removeItem("epicAdventureSave");
+  state = defaultState(selectedClass);
+  logMessage(`New game started as ${selectedClass}.`);
   updateAll();
 }
 
@@ -1700,6 +1718,7 @@ function setupEventListeners() {
   ui.navToggle.addEventListener("click", handleNavToggle);
   ui.inventoryFilter.addEventListener("change", renderInventory);
   ui.sellAll.addEventListener("click", sellAllFiltered);
+  ui.startNewGame.addEventListener("click", startNewGame);
   ui.resetSave.addEventListener("click", resetSave);
   ui.uiScale.addEventListener("change", handleSettingsChange);
   ui.customScale.addEventListener("input", handleSettingsChange);
