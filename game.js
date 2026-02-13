@@ -190,6 +190,12 @@ const GameData = {
     elemental: { ice: 0.7, fire: 1.2, arcane: 1.1 },
     boss: { physical: 0.9, magic: 0.9, holy: 0.9, shadow: 0.9 }
   },
+  traitRules: {
+    Armored: { melee: 0.9, physical: 0.9 },
+    Undead: { shadow: 0.85, holy: 1.2 },
+    Swift: { ranged: 0.9, melee: 1.05 },
+    Boss: { physical: 0.92, magic: 0.92 }
+  },
   enemyTemplates: {
     hunt: { name: "Wilderness Stalker", hp: 80, atk: 8, def: 4, profile: "swift", traits: ["Beast", "Swift"] },
     adventure: { name: "Wild Raider", hp: 120, atk: 10, def: 5, profile: "armored", traits: ["Humanoid", "Armored"] },
@@ -318,6 +324,7 @@ const defaultState = (selectedClass = "Warrior") => {
       inDungeonRun: false,
       dungeonProgress: 0,
       buffs: [],
+      statuses: [],
       cooldowns: {},
       settings: {
         uiScale: "medium",
@@ -1241,12 +1248,166 @@ function startCombat(type, isGate = false, zoneOverride = null) {
     type,
     zoneId: zone.id,
     traits: template.traits || [],
+    profile: template.profile,
+    statuses: [],
+    phase: 1,
+    phaseThresholds: [0.7, 0.35],
+    phaseProfiles: [template.profile || "neutral", "armored", "elemental"],
+    phasePassivePotency: [0, 4, 7],
     resistances: { ...(GameData.resistanceProfiles[template.profile] || {}) }
   };
   state.enemy = enemy;
   state.player.inCombat = true;
   logMessage(`${enemy.name} appears!`);
   updateAll();
+}
+
+function normalizeStatuses(target) {
+  target.statuses = Array.isArray(target.statuses) ? target.statuses : [];
+}
+
+function addStatus(target, status) {
+  normalizeStatuses(target);
+  const payload = {
+    id: status.id,
+    source: status.source || "system",
+    duration: status.duration ?? 1,
+    stacks: status.stacks ?? 1,
+    potency: status.potency ?? 0,
+    tickTiming: status.tickTiming || "start",
+    type: status.type || "dot",
+    target: status.target || "self"
+  };
+  const existing = target.statuses.find((entry) => entry.id === payload.id && entry.source === payload.source);
+  if (existing) {
+    existing.stacks += payload.stacks;
+    existing.duration = Math.max(existing.duration, payload.duration);
+    existing.potency = Math.max(existing.potency, payload.potency);
+  } else {
+    target.statuses.push(payload);
+  }
+}
+
+function tickStatuses(target, timing = "start") {
+  normalizeStatuses(target);
+  const notes = [];
+  target.statuses = target.statuses.filter((status) => {
+    if (status.tickTiming === timing) {
+      const stacks = Math.max(1, status.stacks || 1);
+      if (status.type === "dot") {
+        const dot = Math.max(1, Math.round((status.potency || 1) * stacks));
+        target.hp = Math.max(0, target.hp - dot);
+        notes.push(`${status.id} -${formatNumber(dot)}`);
+      }
+      if (status.type === "hot") {
+        const hot = Math.max(1, Math.round((status.potency || 1) * stacks));
+        target.currentHP = Math.min(target.maxHP, target.currentHP + hot);
+        notes.push(`${status.id} +${formatNumber(hot)}`);
+      }
+      if (status.type === "phase-pulse" && target === state.enemy && state.player.inCombat) {
+        const pulse = Math.max(1, Math.round(status.potency));
+        state.player.currentHP = Math.max(0, state.player.currentHP - pulse);
+        notes.push(`Phase Pulse -${formatNumber(pulse)} HP`);
+      }
+      status.duration -= 1;
+    }
+    return status.duration > 0;
+  });
+  return notes;
+}
+
+function resolveTagTraitModifiers(enemy, tags = []) {
+  if (!enemy) return { multiplier: 1, notes: [] };
+  let multiplier = 1;
+  const notes = [];
+
+  tags.forEach((tag) => {
+    const tagMult = enemy.resistances?.[tag];
+    if (typeof tagMult === "number") multiplier *= tagMult;
+  });
+
+  (enemy.traits || []).forEach((trait) => {
+    const traitTable = (GameData.traitRules || {})[trait];
+    if (!traitTable) return;
+    tags.forEach((tag) => {
+      const traitMult = traitTable[tag];
+      if (typeof traitMult === "number") {
+        multiplier *= traitMult;
+        if (traitMult < 1) notes.push(`Resisted (${trait})`);
+        else if (traitMult > 1) notes.push(`Exposed (${trait})`);
+      }
+    });
+  });
+
+  return { multiplier, notes: [...new Set(notes)] };
+}
+
+function statMultiplierFromStatuses(attacker, defender) {
+  const out = (attacker.statuses || []).reduce((acc, status) => {
+    if (status.type === "dmg-out") return acc * (1 + status.potency * status.stacks);
+    return acc;
+  }, 1);
+  const incoming = (defender.statuses || []).reduce((acc, status) => {
+    if (status.type === "dmg-in") return acc * (1 + status.potency * status.stacks);
+    return acc;
+  }, 1);
+  return out * incoming;
+}
+
+function effectiveDefense(defender) {
+  const debuffMult = (defender.statuses || []).reduce((acc, status) => {
+    if (status.type === "def-down") return acc * (1 - status.potency * status.stacks);
+    return acc;
+  }, 1);
+  const baseDef = typeof defender.def === "number"
+    ? defender.def
+    : (defender === state.player ? baseStats().def : 0);
+  return Math.max(0, baseDef * debuffMult);
+}
+
+function resolveDamagePipeline({ attacker, defender, attackValue, tags, critChance }) {
+  const baseDamage = Math.max(1, attackValue - effectiveDefense(defender) * 0.5);
+  const traitTag = resolveTagTraitModifiers(defender, tags);
+  const buffDebuffMult = statMultiplierFromStatuses(attacker, defender);
+  const crit = Math.random() < critChance;
+  const critMult = crit ? 1.5 : 1;
+  const final = Math.max(1, Math.round(baseDamage * traitTag.multiplier * buffDebuffMult * critMult));
+  const labels = [];
+  if (crit) labels.push("CRIT");
+  labels.push(...traitTag.notes);
+  return { damage: final, labels };
+}
+
+function checkBossPhaseChange() {
+  const enemy = state.enemy;
+  if (!enemy || !(enemy.traits || []).includes("Boss")) return false;
+  const hpRatio = enemy.hp / enemy.maxHP;
+  const nextPhase = hpRatio <= enemy.phaseThresholds[1] ? 3 : hpRatio <= enemy.phaseThresholds[0] ? 2 : 1;
+  if (nextPhase <= enemy.phase) return false;
+  enemy.phase = nextPhase;
+  const profile = enemy.phaseProfiles[nextPhase - 1] || "boss";
+  enemy.resistances = { ...(GameData.resistanceProfiles[profile] || {}) };
+  enemy.statuses = (enemy.statuses || []).filter((status) => status.id !== "boss-phase-passive");
+  addStatus(enemy, {
+    id: "boss-phase-passive",
+    source: `phase-${nextPhase}`,
+    duration: 999,
+    stacks: 1,
+    potency: enemy.phasePassivePotency[nextPhase - 1] || 0,
+    tickTiming: "start",
+    type: "phase-pulse",
+    target: "player"
+  });
+  logMessage(`${enemy.name} shifts to Phase ${nextPhase}!`);
+  return true;
+}
+
+function summarizeTurn(actor, actionLabel, result) {
+  const tags = (result.labels || []).join(", ");
+  const suffix = tags ? ` [${tags}]` : "";
+  const line = `${actor}: ${actionLabel} ${formatNumber(result.damage)} dmg${suffix}`;
+  state.battleSummary = line;
+  logMessage(line);
 }
 
 function performPlayerAction(action, skillName) {
@@ -1256,12 +1417,24 @@ function performPlayerAction(action, skillName) {
   }
   if (!state.player.inCombat) return;
 
-  let summary = "";
+  const playerTickNotes = tickStatuses(state.player, "start");
+  if (playerTickNotes.length) logMessage(`Start Turn: ${playerTickNotes.join(" • ")}`);
+  if (state.player.currentHP <= 0) {
+    handleDeath();
+    return;
+  }
+
   if (action === "attack") {
-    const base = calculateDamage(baseStats().atk, state.enemy.def);
-    const resolved = resolveTagResistance(base, state.enemy, ["physical", "melee"]);
-    summary = `You strike for ${formatNumber(resolved.damage)} damage.${resolved.note}`;
+    const stats = baseStats();
+    const resolved = resolveDamagePipeline({
+      attacker: state.player,
+      defender: state.enemy,
+      attackValue: stats.atk,
+      tags: ["physical", "melee"],
+      critChance: stats.crit
+    });
     state.enemy.hp -= resolved.damage;
+    summarizeTurn("You", "Attack", resolved);
   }
   if (action === "heal") {
     const potion = state.inventory.consumables.find((item) => item.id === "potion" && item.qty > 0);
@@ -1272,7 +1445,8 @@ function performPlayerAction(action, skillName) {
     potion.qty -= 1;
     const healAmount = Math.round(state.player.maxHP * 0.3);
     state.player.currentHP = Math.min(state.player.maxHP, state.player.currentHP + healAmount);
-    summary = `You heal for ${formatNumber(healAmount)} HP.`;
+    state.battleSummary = `You heal for ${formatNumber(healAmount)} HP.`;
+    logMessage(state.battleSummary);
   }
   if (action === "skill" && skillName) {
     const skill = GameData.skills[skillName];
@@ -1286,12 +1460,11 @@ function performPlayerAction(action, skillName) {
       return;
     }
     state.player.resource -= skill.cost;
-    applySkill(skillName, skill);
+    state.battleSummary = applySkill(skillName, skill);
     state.player.cooldowns[`skill-${skillName}`] = now + skill.cooldown * 1000;
-    summary = `${skillName} used.`;
   }
 
-  state.battleSummary = summary;
+  checkBossPhaseChange();
   if (state.enemy.hp <= 0) {
     handleVictory();
     return;
@@ -1302,38 +1475,75 @@ function performPlayerAction(action, skillName) {
 function applySkill(name, skill) {
   const stats = baseStats();
   const skillTags = skill.tags || ["physical"];
-  const applyDamage = (scale) => {
-    const base = calculateDamage(stats.atk * scale, state.enemy.def);
-    const resolved = resolveTagResistance(base, state.enemy, skillTags);
-    state.enemy.hp -= resolved.damage;
-    logMessage(`${name} hits for ${formatNumber(resolved.damage)}.${resolved.note}`);
-  };
-  const applyHeal = (scale) => {
-    const healAmount = Math.round(state.player.maxHP * scale);
-    state.player.currentHP = Math.min(state.player.maxHP, state.player.currentHP + healAmount);
-    logMessage(`${name} heals for ${formatNumber(healAmount)}.`);
-  };
+  const applyDamage = (scale) => resolveDamagePipeline({
+    attacker: state.player,
+    defender: state.enemy,
+    attackValue: Math.max(1, stats.atk * scale),
+    tags: skillTags,
+    critChance: stats.crit
+  });
 
   if (skill.effect.type === "damage") {
-    applyDamage(skill.effect.scale);
+    const resolved = applyDamage(skill.effect.scale);
+    state.enemy.hp -= resolved.damage;
     if (skill.effect.secondary) applySecondary(skill.effect.secondary);
-  } else if (skill.effect.type === "multi") {
-    for (let i = 0; i < skill.effect.hits; i += 1) applyDamage(skill.effect.scale);
-  } else if (skill.effect.type === "heal") {
-    applyHeal(skill.effect.scale);
-  } else if (skill.effect.type === "buff") {
-    state.player.buffs.push({ ...skill.effect, expires: Date.now() + skill.effect.duration * 1000 });
-    logMessage(`${name} grants a buff.`);
-  } else if (skill.effect.type === "resource") {
-    state.player.resource = Math.min(state.player.resourceMax, state.player.resource + skill.effect.amount);
-    logMessage(`${name} restores resource.`);
+    summarizeTurn("You", name, resolved);
+    return state.battleSummary;
   }
+  if (skill.effect.type === "multi") {
+    let total = 0;
+    const labels = [];
+    for (let i = 0; i < skill.effect.hits; i += 1) {
+      const resolved = applyDamage(skill.effect.scale);
+      total += resolved.damage;
+      labels.push(...resolved.labels);
+      state.enemy.hp -= resolved.damage;
+      if (state.enemy.hp <= 0) break;
+    }
+    summarizeTurn("You", `${name} x${skill.effect.hits}`, { damage: total, labels: [...new Set(labels)] });
+    return state.battleSummary;
+  }
+  if (skill.effect.type === "heal") {
+    const healAmount = Math.round(state.player.maxHP * skill.effect.scale);
+    state.player.currentHP = Math.min(state.player.maxHP, state.player.currentHP + healAmount);
+    const line = `${name}: +${formatNumber(healAmount)} HP`;
+    logMessage(line);
+    return line;
+  }
+  if (skill.effect.type === "buff") {
+    addStatus(state.player, {
+      id: `${name.toLowerCase().replace(/\s+/g, "-")}-buff`,
+      source: name,
+      duration: skill.effect.duration || 2,
+      stacks: 1,
+      potency: skill.effect.value || 0,
+      tickTiming: "start",
+      type: skill.effect.stat === "def" ? "dmg-in" : "dmg-out"
+    });
+    const line = `${name}: Buff applied`;
+    logMessage(line);
+    return line;
+  }
+  if (skill.effect.type === "resource") {
+    state.player.resource = Math.min(state.player.resourceMax, state.player.resource + skill.effect.amount);
+    const line = `${name}: Resource restored`;
+    logMessage(line);
+    return line;
+  }
+  return `${name} used.`;
 }
 
 function applySecondary(effect) {
   if (effect.type === "debuff") {
-    state.enemy.debuffs = state.enemy.debuffs || [];
-    state.enemy.debuffs.push({ ...effect, expires: Date.now() + effect.duration * 1000 });
+    addStatus(state.enemy, {
+      id: `${effect.stat}-down`,
+      source: "skill-secondary",
+      duration: effect.duration || 2,
+      stacks: 1,
+      potency: Math.abs(effect.value || 0.1),
+      tickTiming: "start",
+      type: effect.stat === "def" ? "def-down" : "dmg-in"
+    });
   }
   if (effect.type === "heal") {
     const healAmount = Math.round(state.player.maxHP * effect.scale);
@@ -1341,36 +1551,10 @@ function applySecondary(effect) {
   }
 }
 
-
 function resolveTagResistance(baseDamage, enemy, tags = []) {
-  if (!enemy || !enemy.resistances || tags.length === 0) {
-    return { damage: baseDamage, note: "" };
-  }
-
-  let multiplier = 1;
-  let strongestTag = null;
-  let strongestDelta = 0;
-
-  tags.forEach((tag) => {
-    const tagMult = enemy.resistances[tag];
-    if (typeof tagMult === "number") {
-      multiplier *= tagMult;
-      const delta = Math.abs(tagMult - 1);
-      if (delta > strongestDelta) {
-        strongestDelta = delta;
-        strongestTag = { tag, mult: tagMult };
-      }
-    }
-  });
-
-  const damage = Math.max(1, Math.round(baseDamage * multiplier));
-  let note = "";
-  if (strongestTag && strongestTag.mult > 1.05) {
-    note = ` Vulnerable to ${strongestTag.tag} (+${Math.round((strongestTag.mult - 1) * 100)}%).`;
-  } else if (strongestTag && strongestTag.mult < 0.95) {
-    note = ` Resisted ${strongestTag.tag} (-${Math.round((1 - strongestTag.mult) * 100)}%).`;
-  }
-
+  const traitTag = resolveTagTraitModifiers(enemy, tags);
+  const damage = Math.max(1, Math.round(baseDamage * traitTag.multiplier));
+  const note = traitTag.notes.length ? ` ${traitTag.notes.join(", ")}` : "";
   return { damage, note };
 }
 
@@ -1383,9 +1567,26 @@ function formatResistanceSummary(resistances = {}) {
 
 function enemyTurn() {
   if (!state.enemy || state.enemy.hp <= 0) return;
-  const damage = calculateDamage(state.enemy.atk, baseStats().def);
-  state.player.currentHP -= damage;
-  logMessage(`${state.enemy.name} hits for ${formatNumber(damage)}.`);
+  const enemyTickNotes = tickStatuses(state.enemy, "start");
+  if (enemyTickNotes.length) logMessage(`Enemy Start: ${enemyTickNotes.join(" • ")}`);
+  if (!state.enemy || state.enemy.hp <= 0) {
+    handleVictory();
+    return;
+  }
+  if (state.player.currentHP <= 0) {
+    handleDeath();
+    return;
+  }
+
+  const resolved = resolveDamagePipeline({
+    attacker: state.enemy,
+    defender: state.player,
+    attackValue: state.enemy.atk,
+    tags: ["physical"],
+    critChance: 0.08
+  });
+  state.player.currentHP -= resolved.damage;
+  summarizeTurn(state.enemy.name, "Attack", resolved);
   state.player.resource = Math.min(
     state.player.resourceMax,
     state.player.resource + GameData.classes[state.player.class].resource.regen
@@ -1397,9 +1598,7 @@ function enemyTurn() {
 }
 
 function calculateDamage(atk, def) {
-  const crit = Math.random() < baseStats().crit;
-  const raw = Math.max(1, atk - def * 0.5);
-  return Math.round(crit ? raw * 1.5 : raw);
+  return Math.max(1, atk - def * 0.5);
 }
 
 function handleVictory() {
@@ -1571,6 +1770,17 @@ function addEgg(zoneId) {
   });
 }
 
+function pickAutoSkill(enemy) {
+  const skills = getActiveCombatSkills();
+  const options = skills.map((skillName) => {
+    const skill = GameData.skills[skillName];
+    const tags = skill.tags || ["physical"];
+    const mod = resolveTagTraitModifiers(enemy, tags);
+    return { skillName, score: mod.multiplier };
+  }).sort((a, b) => b.score - a.score);
+  return options[0]?.skillName || null;
+}
+
 function handleAutoBattle() {
   const cooldown = cooldownRemaining("auto");
   if (cooldown > 0) {
@@ -1582,18 +1792,36 @@ function handleAutoBattle() {
   let gold = 0;
   let hpLost = 0;
   const lootList = [];
+  let phasePauses = 0;
+
   for (let i = 0; i < fights; i += 1) {
+    const template = i === fights - 1 ? GameData.enemyTemplates.boss : GameData.enemyTemplates.hunt;
+    const enemy = {
+      ...template,
+      traits: template.traits || [],
+      resistances: { ...(GameData.resistanceProfiles[template.profile] || {}) }
+    };
+
+    if (state.player.currentHP < state.player.maxHP * 0.35) {
+      const recovered = Math.round(state.player.maxHP * 0.12);
+      state.player.currentHP = Math.min(state.player.maxHP, state.player.currentHP + recovered);
+    } else {
+      const bestSkill = pickAutoSkill(enemy);
+      hpLost += bestSkill ? Math.max(4, currentZone().level - 2) : (6 + currentZone().level);
+      if ((enemy.traits || []).includes("Boss") && Math.random() < 0.5) phasePauses += 1;
+    }
+
     wins += 1;
     gold += 10 + currentZone().level;
-    hpLost += 6 + currentZone().level;
     if (Math.random() < 0.4) lootList.push("Gear");
   }
+
   gold = Math.round(gold * (1 + getBonus("gold")));
   state.player.currentHP = Math.max(1, state.player.currentHP - hpLost);
   state.player.gold += gold;
   gainXp(GameData.xp.rewards.auto);
   state.player.cooldowns.auto = Date.now() + 15000;
-  state.battleSummary = `Auto Battle: ${fights} fights, ${wins} wins, +${gold} gold, HP lost ${hpLost}. Loot: ${lootList.join(", ") || "None"}.`;
+  state.battleSummary = `Auto Battle: ${fights} fights, ${wins} wins, +${gold} gold, HP lost ${hpLost}, phase pauses ${phasePauses}. Loot: ${lootList.join(", ") || "None"}.`;
   logMessage("Auto battle completed.");
   updateAll();
 }
