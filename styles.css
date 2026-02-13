@@ -414,6 +414,18 @@ button.action[disabled] {
   font-size: 0.9em;
 }
 
+.settings-save-tools {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+#saveDataField {
+  width: 100%;
+  resize: vertical;
+  min-height: 88px;
+}
+
 .fusion-controls {
   display: grid;
   gap: 8px;

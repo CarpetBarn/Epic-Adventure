@@ -254,6 +254,18 @@ const GameData = {
   ]
 };
 
+const SAVE_VERSION = 2;
+const SAVE_KEYS = {
+  meta: "epicAdventureSaveMeta",
+  player: "epicAdventureSavePlayer",
+  inventory: "epicAdventureSaveInventory",
+  equipment: "epicAdventureSaveEquipment",
+  lifeSkills: "epicAdventureSaveLifeSkills",
+  misc: "epicAdventureSaveMisc",
+  legacy: "epicAdventureSave",
+  backup: "epicAdventureSaveBackup"
+};
+
 const defaultState = (selectedClass = "Warrior") => {
   const playerClass = GameData.classes[selectedClass] ? selectedClass : "Warrior";
   const classData = GameData.classes[playerClass];
@@ -353,6 +365,10 @@ const ui = {
   toggleCompactNav: document.getElementById("toggleCompactNav"),
   newGameClass: document.getElementById("newGameClass"),
   startNewGame: document.getElementById("startNewGame"),
+  exportSave: document.getElementById("exportSave"),
+  importSave: document.getElementById("importSave"),
+  restoreBackup: document.getElementById("restoreBackup"),
+  saveDataField: document.getElementById("saveDataField"),
   resetSave: document.getElementById("resetSave"),
   mobileActionBar: document.getElementById("mobileActionBar"),
   navToggle: document.getElementById("navToggle"),
@@ -387,42 +403,116 @@ function renderLog() {
     .join("");
 }
 
+let lastSavedSnapshot = {};
+
 function saveState() {
-  localStorage.setItem("epicAdventureSave", JSON.stringify(state));
+  const sections = {
+    meta: { version: SAVE_VERSION, timestamp: Date.now() },
+    player: state.player,
+    inventory: state.inventory,
+    equipment: state.equipment,
+    lifeSkills: state.lifeSkills,
+    misc: {
+      enemy: state.enemy,
+      epicCooldowns: state.epicCooldowns,
+      log: state.log,
+      battleSummary: state.battleSummary,
+      selectedFusion: state.selectedFusion,
+      selectedBreeding: state.selectedBreeding,
+      eggBattleCount: state.eggBattleCount
+    }
+  };
+
+  for (const [section, value] of Object.entries(sections)) {
+    const payload = JSON.stringify(value);
+    if (lastSavedSnapshot[section] !== payload) {
+      localStorage.setItem(SAVE_KEYS[section], payload);
+      lastSavedSnapshot[section] = payload;
+    }
+  }
 }
 
-const debouncedSave = debounce(saveState, 600);
+const debouncedSave = debounce(saveState, 800);
+
+function migrateSaveBundle(bundle) {
+  const migrated = { ...bundle };
+  if (!migrated.meta) migrated.meta = { version: 1 };
+  if (migrated.meta.version < 2) {
+    migrated.player = migrated.player || {};
+    migrated.player.settings = {
+      compactNav: true,
+      ...(migrated.player.settings || {})
+    };
+    migrated.meta.version = 2;
+  }
+  return migrated;
+}
+
+function buildStateFromBundle(bundle) {
+  const base = defaultState();
+  const migrated = migrateSaveBundle(bundle);
+  return {
+    ...base,
+    ...migrated.misc,
+    player: {
+      ...base.player,
+      ...(migrated.player || {}),
+      settings: {
+        ...base.player.settings,
+        ...(migrated.player?.settings || {})
+      }
+    },
+    inventory: {
+      ...base.inventory,
+      ...(migrated.inventory || {})
+    },
+    equipment: {
+      ...base.equipment,
+      ...(migrated.equipment || {})
+    },
+    lifeSkills: {
+      ...base.lifeSkills,
+      ...(migrated.lifeSkills || {})
+    }
+  };
+}
 
 function loadState() {
-  const raw = localStorage.getItem("epicAdventureSave");
-  if (!raw) return defaultState();
   try {
-    const parsed = JSON.parse(raw);
-    const base = defaultState();
-    return {
-      ...base,
-      ...parsed,
-      player: {
-        ...base.player,
-        ...parsed.player,
-        settings: {
-          ...base.player.settings,
-          ...(parsed.player?.settings || {})
-        }
-      },
-      inventory: {
-        ...base.inventory,
-        ...parsed.inventory
-      },
-      equipment: {
-        ...base.equipment,
-        ...parsed.equipment
-      },
-      lifeSkills: {
-        ...base.lifeSkills,
-        ...parsed.lifeSkills
+    const metaRaw = localStorage.getItem(SAVE_KEYS.meta);
+    if (metaRaw) {
+      const bundle = {
+        meta: JSON.parse(metaRaw),
+        player: JSON.parse(localStorage.getItem(SAVE_KEYS.player) || "{}"),
+        inventory: JSON.parse(localStorage.getItem(SAVE_KEYS.inventory) || "{}"),
+        equipment: JSON.parse(localStorage.getItem(SAVE_KEYS.equipment) || "{}"),
+        lifeSkills: JSON.parse(localStorage.getItem(SAVE_KEYS.lifeSkills) || "{}"),
+        misc: JSON.parse(localStorage.getItem(SAVE_KEYS.misc) || "{}")
+      };
+      return buildStateFromBundle(bundle);
+    }
+
+    const legacyRaw = localStorage.getItem(SAVE_KEYS.legacy);
+    if (!legacyRaw) return defaultState();
+    const parsed = JSON.parse(legacyRaw);
+    const upgraded = buildStateFromBundle({
+      meta: { version: 1 },
+      player: parsed.player,
+      inventory: parsed.inventory,
+      equipment: parsed.equipment,
+      lifeSkills: parsed.lifeSkills,
+      misc: {
+        enemy: parsed.enemy,
+        epicCooldowns: parsed.epicCooldowns,
+        log: parsed.log,
+        battleSummary: parsed.battleSummary,
+        selectedFusion: parsed.selectedFusion,
+        selectedBreeding: parsed.selectedBreeding,
+        eggBattleCount: parsed.eggBattleCount
       }
-    };
+    });
+    localStorage.removeItem(SAVE_KEYS.legacy);
+    return upgraded;
   } catch (error) {
     return defaultState();
   }
@@ -501,7 +591,23 @@ function playerResourceLabel() {
   return GameData.classes[state.player.class].resource.name;
 }
 
+let statsCache = { signature: "", value: null };
+
+function buildStatsSignature() {
+  return JSON.stringify({
+    className: state.player.class,
+    unlocked: state.player.unlockedNodes,
+    equipment: state.equipment,
+    dragons: state.inventory.dragons
+  });
+}
+
 function baseStats() {
+  const signature = buildStatsSignature();
+  if (statsCache.signature === signature && statsCache.value) {
+    return statsCache.value;
+  }
+
   const classStats = GameData.classes[state.player.class].stats;
   const equipmentBonus = Object.values(state.equipment)
     .filter(Boolean)
@@ -543,8 +649,14 @@ function baseStats() {
   const resourceMax = Math.round(
     GameData.classes[state.player.class].resource.max * (1 + (bonus.resource || 0) + (dragonBonus.resource || 0))
   );
-  return { maxHP, atk, def, crit, spd, resourceMax };
+
+  statsCache = {
+    signature,
+    value: { maxHP, atk, def, crit, spd, resourceMax }
+  };
+  return statsCache.value;
 }
+
 
 function refreshStats() {
   const stats = baseStats();
@@ -1603,10 +1715,23 @@ function handleSettingsChange() {
   updateAll();
 }
 
+
+function clearPersistedSave() {
+  localStorage.removeItem(SAVE_KEYS.legacy);
+  localStorage.removeItem(SAVE_KEYS.meta);
+  localStorage.removeItem(SAVE_KEYS.player);
+  localStorage.removeItem(SAVE_KEYS.inventory);
+  localStorage.removeItem(SAVE_KEYS.equipment);
+  localStorage.removeItem(SAVE_KEYS.lifeSkills);
+  localStorage.removeItem(SAVE_KEYS.misc);
+  lastSavedSnapshot = {};
+}
+
 function resetSave() {
   if (!confirm("Reset all progress?")) return;
   const selectedClass = ui.newGameClass.value;
-  localStorage.removeItem("epicAdventureSave");
+  createBackupSnapshot();
+  clearPersistedSave();
   state = defaultState(selectedClass);
   logMessage(`New ${selectedClass} created.`);
   updateAll();
@@ -1615,10 +1740,84 @@ function resetSave() {
 function startNewGame() {
   if (!confirm("Start a new game with the selected class? Current progress will be erased.")) return;
   const selectedClass = ui.newGameClass.value;
-  localStorage.removeItem("epicAdventureSave");
+  createBackupSnapshot();
+  clearPersistedSave();
   state = defaultState(selectedClass);
   logMessage(`New game started as ${selectedClass}.`);
   updateAll();
+}
+
+function createBackupSnapshot() {
+  const backup = {
+    meta: { version: SAVE_VERSION, timestamp: Date.now() },
+    player: state.player,
+    inventory: state.inventory,
+    equipment: state.equipment,
+    lifeSkills: state.lifeSkills,
+    misc: {
+      enemy: state.enemy,
+      epicCooldowns: state.epicCooldowns,
+      log: state.log,
+      battleSummary: state.battleSummary,
+      selectedFusion: state.selectedFusion,
+      selectedBreeding: state.selectedBreeding,
+      eggBattleCount: state.eggBattleCount
+    }
+  };
+  localStorage.setItem(SAVE_KEYS.backup, JSON.stringify(backup));
+}
+
+function exportSave() {
+  saveState();
+  const payload = {
+    meta: JSON.parse(localStorage.getItem(SAVE_KEYS.meta) || "{}"),
+    player: JSON.parse(localStorage.getItem(SAVE_KEYS.player) || "{}"),
+    inventory: JSON.parse(localStorage.getItem(SAVE_KEYS.inventory) || "{}"),
+    equipment: JSON.parse(localStorage.getItem(SAVE_KEYS.equipment) || "{}"),
+    lifeSkills: JSON.parse(localStorage.getItem(SAVE_KEYS.lifeSkills) || "{}"),
+    misc: JSON.parse(localStorage.getItem(SAVE_KEYS.misc) || "{}")
+  };
+  ui.saveDataField.value = JSON.stringify(payload);
+  ui.saveDataField.select();
+  document.execCommand("copy");
+  logMessage("Save exported to text field (and copied if supported).");
+}
+
+function importSave() {
+  const raw = ui.saveDataField.value.trim();
+  if (!raw) {
+    logMessage("Paste a save payload first.");
+    return;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    const merged = buildStateFromBundle(parsed);
+    createBackupSnapshot();
+    state = merged;
+    lastSavedSnapshot = {};
+    saveState();
+    logMessage("Save imported successfully.");
+    updateAll();
+  } catch (error) {
+    logMessage("Invalid save payload.");
+  }
+}
+
+function restoreBackup() {
+  const raw = localStorage.getItem(SAVE_KEYS.backup);
+  if (!raw) {
+    logMessage("No backup snapshot available.");
+    return;
+  }
+  try {
+    state = buildStateFromBundle(JSON.parse(raw));
+    lastSavedSnapshot = {};
+    saveState();
+    logMessage("Backup restored.");
+    updateAll();
+  } catch (error) {
+    logMessage("Backup restore failed.");
+  }
 }
 
 function handleSwipe() {
@@ -1798,6 +1997,9 @@ function setupEventListeners() {
   ui.inventorySort.addEventListener("change", renderInventory);
   ui.sellAll.addEventListener("click", sellAllFiltered);
   ui.startNewGame.addEventListener("click", startNewGame);
+  ui.exportSave.addEventListener("click", exportSave);
+  ui.importSave.addEventListener("click", importSave);
+  ui.restoreBackup.addEventListener("click", restoreBackup);
   ui.resetSave.addEventListener("click", resetSave);
   ui.uiScale.addEventListener("change", handleSettingsChange);
   ui.customScale.addEventListener("input", handleSettingsChange);
@@ -1820,6 +2022,8 @@ function setupEventListeners() {
 
 function initGame() {
   ensureStateIntegrity();
+  lastSavedSnapshot = {};
+  saveState();
   updateOrientation();
   setupEventListeners();
   registerServiceWorker();
