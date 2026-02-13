@@ -409,6 +409,7 @@ const ui = {
   mobileActionBar: document.getElementById("mobileActionBar"),
   navToggle: document.getElementById("navToggle"),
   navOverlay: document.getElementById("navOverlay"),
+  toastStack: document.getElementById("toastStack"),
   fusionSlot: document.getElementById("fusionSlot"),
   fusionTier: document.getElementById("fusionTier"),
   fusionRarity: document.getElementById("fusionRarity"),
@@ -486,6 +487,62 @@ function renderLog() {
   ui.logEntries.innerHTML = state.log
     .map((entry) => `<div>${entry.message}</div>`)
     .join("");
+}
+
+function ensureToastStack() {
+  if (!ui.toastStack) {
+    const node = document.createElement("div");
+    node.id = "toastStack";
+    node.className = "toast-stack";
+    document.body.appendChild(node);
+    ui.toastStack = node;
+  }
+}
+
+function showToast(message) {
+  ensureToastStack();
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.textContent = message;
+  ui.toastStack.appendChild(toast);
+  setTimeout(() => toast.classList.add("show"), 20);
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 220);
+  }, 1800);
+}
+
+function initPanelHeaders() {
+  const primaryByPanel = {
+    combat: { label: "Hunt", action: "hunt" },
+    zones: { label: "To Combat", tab: "combat" },
+    inventory: { label: "Sell All", click: "#sellAll" },
+    skills: { label: "To Combat", tab: "combat" },
+    life: { label: "Hunt", action: "hunt" },
+    dragons: { label: "To Inventory", tab: "inventory" },
+    shop: { label: "Buy Potion", buy: "potion" },
+    settings: { label: "Export Save", click: "#exportSave" }
+  };
+
+  document.querySelectorAll(".panel").forEach((panel) => {
+    const card = panel.querySelector(".card");
+    const title = card?.querySelector("h2");
+    if (!card || !title || card.querySelector(".panel-header")) return;
+    const panelName = panel.id.replace("panel-", "");
+    const config = primaryByPanel[panelName] || { label: "Open Combat", tab: "combat" };
+    const header = document.createElement("div");
+    header.className = "panel-header";
+    const action = document.createElement("button");
+    action.className = "secondary panel-primary";
+    action.textContent = config.label;
+    if (config.action) action.dataset.action = config.action;
+    if (config.tab) action.dataset.panelTab = config.tab;
+    if (config.click) action.dataset.panelClick = config.click;
+    if (config.buy) action.dataset.buy = config.buy;
+    title.replaceWith(header);
+    header.appendChild(title);
+    header.appendChild(action);
+  });
 }
 
 let lastSavedSnapshot = {};
@@ -843,20 +900,37 @@ function renderCombatButtons() {
     { id: "auto", label: "Auto Battle" }
   ];
 
+  const reasonForAction = (action, skill) => {
+    if (skill) {
+      const cooldown = cooldownRemaining(`skill-${skill}`);
+      if (!state.player.inCombat) return "Start combat to use skills.";
+      if (state.player.resource < GameData.skills[skill].cost) return "Not enough resource.";
+      if (cooldown > 0) return `Cooldown ${Math.ceil(cooldown)}s remaining.`;
+      return "";
+    }
+    if (action.id === "auto") {
+      const cdr = cooldownRemaining("auto");
+      if (state.player.inCombat) return "Finish current combat first.";
+      if (cdr > 0) return `Auto battle cooldown ${Math.ceil(cdr)}s.`;
+      return "";
+    }
+    if (!state.player.inCombat) return "Start combat first.";
+    return "";
+  };
+
   const actionButtons = actions.map((action) => {
-    const combatDisabled = !state.player.inCombat && action.id !== "auto";
-    const disabled = combatDisabled || (action.id === "auto" && (cooldownRemaining("auto") > 0 || state.player.inCombat));
-    return `<button class="action" data-action="${action.id}" ${disabled ? "disabled" : ""}>${action.label}</button>`;
+    const reason = reasonForAction(action, null);
+    const disabled = Boolean(reason);
+    return `<button class="action" data-action="${action.id}" ${disabled ? "disabled" : ""} title="${reason || action.label}">${action.label}</button>`;
   });
 
   const activeSkills = getActiveCombatSkills();
   const skillButtons = activeSkills.map((skill) => {
-    const cooldown = cooldownRemaining(`skill-${skill}`);
-    const disabled = !state.player.inCombat || state.player.resource < GameData.skills[skill].cost || cooldown > 0;
+    const reason = reasonForAction(null, skill);
+    const disabled = Boolean(reason);
     const tagLabel = (GameData.skills[skill].tags || ["physical"]).join("/");
-    return `<button class="action" data-skill="${skill}" title="Tags: ${tagLabel}" ${disabled ? "disabled" : ""}>
-      ${skill} ${cooldown > 0 ? `(${Math.ceil(cooldown)}s)` : ""}
-    </button>`;
+    const cooldown = cooldownRemaining(`skill-${skill}`);
+    return `<button class="action" data-skill="${skill}" ${disabled ? "disabled" : ""} title="${reason || `Tags: ${tagLabel}`}">${skill} ${cooldown > 0 ? `(${Math.ceil(cooldown)}s)` : ""}</button>`;
   });
 
   const loopButtons = state.player.inCombat
@@ -867,16 +941,27 @@ function renderCombatButtons() {
         `<button class="action" data-action="miniboss">Mini Boss</button>`,
         `<button class="action" data-action="boss">Boss</button>`
       ];
-  const dungeonButton = `<button class="action" data-action="dungeon" ${state.player.inDungeonRun ? "disabled" : ""}>Start Dungeon</button>`;
+  const dungeonButton = `<button class="action" data-action="dungeon" ${state.player.inDungeonRun ? 'disabled title="Already in dungeon run."' : ""}>Start Dungeon</button>`;
   const gateZone = nextGateZone();
   const gateButton = gateZone ? `<button class="action" data-action="gate">Gate Boss • Zone ${gateZone.id}</button>` : "";
   const exitButton = state.player.inDungeonRun ? `<button class="action danger" data-action="exit-dungeon">Exit Dungeon</button>` : "";
 
-  ui.combatActions.innerHTML = actionButtons.join("");
-  ui.combatSecondary.innerHTML = [...loopButtons, ...skillButtons, dungeonButton, gateButton, exitButton].join("");
+  const grouped = [
+    { name: "Core", items: actionButtons },
+    { name: "Combat", items: [...loopButtons, dungeonButton, gateButton, exitButton].filter(Boolean) },
+    { name: "Skills", items: skillButtons }
+  ];
 
-  ui.mobileActionBar.innerHTML = [...actionButtons, ...loopButtons, ...skillButtons, dungeonButton, gateButton, exitButton].join("");
+  const groupHtml = grouped
+    .filter((group) => group.items.length)
+    .map((group) => `<details class="action-group" open><summary>${group.name}</summary><div class="action-group-body">${group.items.join("")}</div></details>`)
+    .join("");
+
+  ui.combatActions.innerHTML = groupHtml;
+  ui.combatSecondary.innerHTML = "";
+  ui.mobileActionBar.innerHTML = groupHtml;
 }
+
 
 function renderZones() {
   const now = Date.now();
@@ -1966,6 +2051,7 @@ function equipItem(itemId) {
   state.equipment[slot] = item;
   state.inventory.gear = state.inventory.gear.filter((gear) => gear.id !== itemId);
   logMessage(`${item.name} equipped.`);
+  showToast(`${item.name} equipped`);
   updateAll();
 }
 
@@ -1979,6 +2065,7 @@ function unequipSlot(slot) {
   state.inventory.gear.push(item);
   state.equipment[slot] = null;
   logMessage(`${item.name} unequipped.`);
+  showToast(`${item.name} unequipped`);
   updateAll();
 }
 
@@ -1994,6 +2081,7 @@ function sellItem(itemId) {
     const value = Math.round(20 + item.gearTier * 10);
     state.player.gold += value;
     logMessage(`${item.name} sold for ${value} gold.`);
+    showToast(`Sold ${item.name}`);
     updateAll();
   }
 }
@@ -2168,6 +2256,7 @@ function handleFusion() {
   state.selectedFusion = [];
   if (Math.random() < failureChance) {
     logMessage("Fusion failed. Items lost.");
+    showToast("Fusion failed");
     updateAll();
     return;
   }
@@ -2176,6 +2265,7 @@ function handleFusion() {
   newItem.gearTier = newTier;
   state.inventory.gear.push(newItem);
   logMessage(`Fusion success: ${newItem.name}.`);
+  showToast("Fusion success");
   updateAll();
 }
 
@@ -2208,6 +2298,7 @@ function socketGem(gearId) {
   if (gem.qty <= 0) state.inventory.gems = state.inventory.gems.filter((item) => item.qty > 0);
   gear.gems.push({ name: gem.name, tier: gem.tier, rarity: gem.rarity });
   logMessage(`Socketed ${gem.name} into ${gear.name}.`);
+  showToast(`Socketed ${gem.name}`);
   updateAll();
 }
 
@@ -2220,19 +2311,24 @@ function removeGem(gearId) {
   updateAll();
 }
 
+function setNavState(next) {
+  document.body.dataset.nav = next;
+  const drawerOpen = next === "drawer";
+  ui.navOverlay.setAttribute("aria-hidden", String(!drawerOpen));
+  document.body.classList.toggle("nav-open", drawerOpen);
+}
+
 function handleNavToggle() {
   if (window.innerWidth <= 900 || state.player.settings.mobileLayout) {
-    document.body.dataset.nav = document.body.dataset.nav === "drawer" ? "closed" : "drawer";
-    ui.navOverlay.setAttribute("aria-hidden", document.body.dataset.nav !== "drawer");
+    setNavState(document.body.dataset.nav === "drawer" ? "closed" : "drawer");
   } else {
-    document.body.dataset.nav = document.body.dataset.nav === "collapsed" ? "expanded" : "collapsed";
+    setNavState(document.body.dataset.nav === "collapsed" ? "expanded" : "collapsed");
   }
 }
 
 function closeDrawer() {
   if (window.innerWidth <= 900 || state.player.settings.mobileLayout) {
-    document.body.dataset.nav = "closed";
-    ui.navOverlay.setAttribute("aria-hidden", "true");
+    setNavState("closed");
   }
 }
 
@@ -2244,7 +2340,7 @@ function switchTab(tab) {
   if (tab !== "combat") ui.mobileActionBar.style.display = "none";
   else ui.mobileActionBar.style.display = "";
   renderActivePanel();
-  closeDrawer();
+  if (window.innerWidth <= 900 || state.player.settings.mobileLayout) closeDrawer();
 }
 
 function handleSettingsChange() {
@@ -2420,6 +2516,20 @@ function setupEventListeners() {
       switchTab(tabButton.dataset.tab);
       return;
     }
+    const panelHeaderButton = event.target.closest(".panel-primary");
+    if (panelHeaderButton) {
+      if (panelHeaderButton.dataset.panelTab) switchTab(panelHeaderButton.dataset.panelTab);
+      if (panelHeaderButton.dataset.action) {
+        const proxy = document.querySelector(`button[data-action="${panelHeaderButton.dataset.action}"]`);
+        if (proxy && !proxy.disabled) proxy.click();
+      }
+      if (panelHeaderButton.dataset.panelClick) {
+        const proxy = document.querySelector(panelHeaderButton.dataset.panelClick);
+        if (proxy) proxy.click();
+      }
+      if (panelHeaderButton.dataset.buy) handleShopBuy(panelHeaderButton.dataset.buy);
+      return;
+    }
     if (event.target.matches("#navOverlay")) {
       closeDrawer();
       return;
@@ -2583,6 +2693,8 @@ function setupEventListeners() {
 
 function initGame() {
   ensureStateIntegrity();
+  ensureToastStack();
+  initPanelHeaders();
   lastSavedSnapshot = {};
   saveState();
   updateOrientation();

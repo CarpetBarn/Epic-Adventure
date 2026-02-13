@@ -48,9 +48,9 @@
           <span class="icon">⚙️</span><span class="label">Settings</span>
         </button>
       </nav>
-      <section class="log" aria-live="polite" aria-label="Game log">
-        <div class="log-title">Game Log</div>
-        <div id="logEntries" class="log-entries"></div>
+      <section class="log" aria-live="polite" aria-label="Battle results">
+        <div class="log-title">Battle Results</div>
+        <div id="battleSummary" class="summary"></div>
       </section>
     </aside>
 
@@ -80,8 +80,11 @@
             <div class="combat-secondary" id="combatSecondary"></div>
           </div>
           <div class="card">
-            <h3>Battle Results</h3>
-            <div id="battleSummary" class="summary"></div>
+            <h3>Game Log</h3>
+            <section class="log" aria-live="polite" aria-label="Game log">
+              <div class="log-title">Game Log</div>
+              <div id="logEntries" class="log-entries"></div>
+            </section>
           </div>
         </div>
         <div class="mobile-action-bar" id="mobileActionBar"></div>

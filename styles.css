@@ -26,6 +26,11 @@ body {
   color: var(--text);
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   font-size: calc(15px * var(--scale));
+  overflow: hidden;
+}
+
+body.nav-open {
+  overflow: hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -43,6 +48,8 @@ body {
 .app {
   display: flex;
   min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .nav {
@@ -181,6 +188,9 @@ body[data-navstyle="cozy"] .brand {
   flex: 1;
   padding: 24px;
   transition: margin 0.2s ease;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .topbar {
@@ -239,10 +249,30 @@ body[data-navstyle="cozy"] .brand {
 
 .panel {
   display: none;
+  overflow: auto;
+  min-height: 0;
+  padding-bottom: 8px;
 }
 
 .panel.active {
   display: block;
+}
+
+.panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(180deg, rgba(23,26,36,0.98), rgba(23,26,36,0.92));
+  padding: 8px 0 12px;
+  margin-bottom: 12px;
+}
+
+.panel-header h2 {
+  margin: 0;
 }
 
 .panel-grid {
@@ -443,6 +473,57 @@ button.action[disabled] {
   display: none;
 }
 
+
+.action-group {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: var(--panel-light);
+  padding: 6px;
+}
+
+.action-group summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.action-group-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+button[disabled][title] {
+  border: 1px dashed rgba(255,255,255,0.2);
+}
+
+.toast-stack {
+  position: fixed;
+  right: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 60;
+}
+
+.toast {
+  background: rgba(18, 22, 32, 0.95);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 8px 12px;
+  transform: translateY(8px);
+  opacity: 0;
+  transition: 0.2s ease;
+}
+
+.toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
 .overlay {
   display: none;
   position: fixed;
@@ -507,6 +588,14 @@ body[data-nav="drawer"] .overlay {
 
   .mobile-action-bar button {
     flex: 0 0 auto;
+  }
+
+  .mobile-action-bar .action-group {
+    min-width: 220px;
+  }
+
+  .mobile-action-bar .action-group:not([open]) .action-group-body {
+    display: none;
   }
 
   .log {
