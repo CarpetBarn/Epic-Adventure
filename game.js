@@ -17,7 +17,7 @@ const GameData = {
     Warrior: {
       resource: { name: "Rage", max: 100, regen: 12 },
       stats: { hp: 130, atk: 12, def: 10, crit: 0.05, spd: 1.0 },
-      skills: ["Cleave", "Warcry", "Shield Slam"],
+      skills: ["Cleave", "Warcry", "Shield Slam", "Whirlwind"],
       trees: {
         Offense: ["Brutal Force", "Berserker Focus"],
         Defense: ["Iron Wall", "Battle Hardened"],
@@ -27,7 +27,7 @@ const GameData = {
     Rogue: {
       resource: { name: "Energy", max: 80, regen: 15 },
       stats: { hp: 110, atk: 14, def: 8, crit: 0.12, spd: 1.2 },
-      skills: ["Backstab", "Smoke Bomb", "Flurry"],
+      skills: ["Backstab", "Smoke Bomb", "Flurry", "Venom Strike"],
       trees: {
         Offense: ["Shadow Strike", "Blade Tempo"],
         Defense: ["Evasion", "Light Foot"],
@@ -37,7 +37,7 @@ const GameData = {
     Mage: {
       resource: { name: "Mana", max: 120, regen: 18 },
       stats: { hp: 95, atk: 16, def: 6, crit: 0.08, spd: 0.95 },
-      skills: ["Arcane Bolt", "Frost Nova", "Mana Surge"],
+      skills: ["Arcane Bolt", "Frost Nova", "Mana Surge", "Flame Lance"],
       trees: {
         Offense: ["Spell Power", "Elemental Fury"],
         Defense: ["Arcane Shield", "Ice Barrier"],
@@ -47,7 +47,7 @@ const GameData = {
     Cleric: {
       resource: { name: "Faith", max: 100, regen: 16 },
       stats: { hp: 120, atk: 10, def: 9, crit: 0.06, spd: 1.0 },
-      skills: ["Smite", "Radiant Heal", "Sanctuary"],
+      skills: ["Smite", "Radiant Heal", "Sanctuary", "Purge"],
       trees: {
         Offense: ["Holy Fire", "Judgment"],
         Defense: ["Divine Guard", "Blessed Armor"],
@@ -57,7 +57,7 @@ const GameData = {
     Ranger: {
       resource: { name: "Focus", max: 90, regen: 14 },
       stats: { hp: 115, atk: 13, def: 8, crit: 0.09, spd: 1.1 },
-      skills: ["Piercing Shot", "Multi Shot", "Camouflage"],
+      skills: ["Piercing Shot", "Multi Shot", "Camouflage", "Explosive Arrow"],
       trees: {
         Offense: ["Sharp Aim", "Hunter's Mark"],
         Defense: ["Wild Reflex", "Thorn Guard"],
@@ -67,7 +67,7 @@ const GameData = {
     Paladin: {
       resource: { name: "Zeal", max: 110, regen: 12 },
       stats: { hp: 135, atk: 11, def: 11, crit: 0.05, spd: 0.95 },
-      skills: ["Hammer of Light", "Aegis", "Zealous Charge"],
+      skills: ["Hammer of Light", "Aegis", "Zealous Charge", "Judgment Blade"],
       trees: {
         Offense: ["Crusader", "Lightbringer"],
         Defense: ["Guardian", "Sacred Bulwark"],
@@ -77,7 +77,7 @@ const GameData = {
     Necromancer: {
       resource: { name: "Souls", max: 90, regen: 10 },
       stats: { hp: 105, atk: 15, def: 7, crit: 0.07, spd: 0.95 },
-      skills: ["Soul Drain", "Bone Spear", "Grave Pact"],
+      skills: ["Soul Drain", "Bone Spear", "Grave Pact", "Death Bloom"],
       trees: {
         Offense: ["Death Coil", "Dark Ritual"],
         Defense: ["Bone Armor", "Last Breath"],
@@ -86,27 +86,34 @@ const GameData = {
     }
   },
   skills: {
-    Cleave: { cost: 25, cooldown: 6, effect: { type: "damage", scale: 1.4 } },
+    Cleave: { cost: 25, cooldown: 6, tags: ["physical", "melee"], effect: { type: "damage", scale: 1.4 } },
     Warcry: { cost: 15, cooldown: 10, effect: { type: "buff", stat: "atk", value: 0.15, duration: 2 } },
-    "Shield Slam": { cost: 20, cooldown: 8, effect: { type: "damage", scale: 1.1, secondary: { type: "debuff", stat: "def", value: -0.1, duration: 2 } } },
-    Backstab: { cost: 20, cooldown: 6, effect: { type: "damage", scale: 1.6 } },
+    "Shield Slam": { cost: 20, cooldown: 8, tags: ["physical", "melee"], effect: { type: "damage", scale: 1.1, secondary: { type: "debuff", stat: "def", value: -0.1, duration: 2 } } },
+    Backstab: { cost: 20, cooldown: 6, tags: ["physical", "melee"], effect: { type: "damage", scale: 1.6 } },
     "Smoke Bomb": { cost: 25, cooldown: 12, effect: { type: "buff", stat: "def", value: 0.2, duration: 2 } },
-    Flurry: { cost: 30, cooldown: 10, effect: { type: "multi", hits: 2, scale: 0.75 } },
-    "Arcane Bolt": { cost: 18, cooldown: 5, effect: { type: "damage", scale: 1.5 } },
-    "Frost Nova": { cost: 28, cooldown: 9, effect: { type: "damage", scale: 1.1, secondary: { type: "debuff", stat: "spd", value: -0.1, duration: 2 } } },
+    Flurry: { cost: 30, cooldown: 10, tags: ["physical", "melee"], effect: { type: "multi", hits: 2, scale: 0.75 } },
+    "Arcane Bolt": { cost: 18, cooldown: 5, tags: ["magic", "arcane"], effect: { type: "damage", scale: 1.5 } },
+    "Frost Nova": { cost: 28, cooldown: 9, tags: ["magic", "ice"], effect: { type: "damage", scale: 1.1, secondary: { type: "debuff", stat: "spd", value: -0.1, duration: 2 } } },
     "Mana Surge": { cost: 10, cooldown: 12, effect: { type: "resource", amount: 25 } },
-    Smite: { cost: 15, cooldown: 5, effect: { type: "damage", scale: 1.3 } },
+    Smite: { cost: 15, cooldown: 5, tags: ["holy", "magic"], effect: { type: "damage", scale: 1.3 } },
     "Radiant Heal": { cost: 20, cooldown: 10, effect: { type: "heal", scale: 0.3 } },
     Sanctuary: { cost: 25, cooldown: 12, effect: { type: "buff", stat: "def", value: 0.2, duration: 2 } },
-    "Piercing Shot": { cost: 18, cooldown: 6, effect: { type: "damage", scale: 1.4 } },
-    "Multi Shot": { cost: 24, cooldown: 9, effect: { type: "multi", hits: 2, scale: 0.8 } },
+    "Piercing Shot": { cost: 18, cooldown: 6, tags: ["physical", "ranged"], effect: { type: "damage", scale: 1.4 } },
+    "Multi Shot": { cost: 24, cooldown: 9, tags: ["physical", "ranged"], effect: { type: "multi", hits: 2, scale: 0.8 } },
     Camouflage: { cost: 12, cooldown: 10, effect: { type: "buff", stat: "crit", value: 0.1, duration: 2 } },
-    "Hammer of Light": { cost: 22, cooldown: 7, effect: { type: "damage", scale: 1.3 } },
+    "Hammer of Light": { cost: 22, cooldown: 7, tags: ["holy", "melee"], effect: { type: "damage", scale: 1.3 } },
     Aegis: { cost: 18, cooldown: 10, effect: { type: "buff", stat: "def", value: 0.25, duration: 2 } },
-    "Zealous Charge": { cost: 30, cooldown: 12, effect: { type: "damage", scale: 1.6 } },
-    "Soul Drain": { cost: 22, cooldown: 6, effect: { type: "damage", scale: 1.2, secondary: { type: "heal", scale: 0.15 } } },
-    "Bone Spear": { cost: 26, cooldown: 8, effect: { type: "damage", scale: 1.5 } },
-    "Grave Pact": { cost: 18, cooldown: 12, effect: { type: "buff", stat: "atk", value: 0.2, duration: 2 } }
+    "Zealous Charge": { cost: 30, cooldown: 12, tags: ["holy", "physical", "melee"], effect: { type: "damage", scale: 1.6 } },
+    "Soul Drain": { cost: 22, cooldown: 6, tags: ["shadow", "magic"], effect: { type: "damage", scale: 1.2, secondary: { type: "heal", scale: 0.15 } } },
+    "Bone Spear": { cost: 26, cooldown: 8, tags: ["shadow", "physical", "ranged"], effect: { type: "damage", scale: 1.5 } },
+    "Grave Pact": { cost: 18, cooldown: 12, effect: { type: "buff", stat: "atk", value: 0.2, duration: 2 } },
+    Whirlwind: { cost: 28, cooldown: 11, tags: ["physical", "melee"], effect: { type: "multi", hits: 2, scale: 0.9 } },
+    "Venom Strike": { cost: 22, cooldown: 8, tags: ["shadow", "melee"], effect: { type: "damage", scale: 1.35 } },
+    "Flame Lance": { cost: 26, cooldown: 9, tags: ["magic", "fire"], effect: { type: "damage", scale: 1.45 } },
+    Purge: { cost: 24, cooldown: 10, tags: ["holy", "magic"], effect: { type: "damage", scale: 1.4 } },
+    "Explosive Arrow": { cost: 25, cooldown: 10, tags: ["physical", "ranged", "fire"], effect: { type: "damage", scale: 1.5 } },
+    "Judgment Blade": { cost: 27, cooldown: 10, tags: ["holy", "physical", "melee"], effect: { type: "damage", scale: 1.5 } },
+    "Death Bloom": { cost: 24, cooldown: 9, tags: ["shadow", "magic"], effect: { type: "multi", hits: 2, scale: 0.85 } }
   },
   skillNodes: {
     "Brutal Force": { stat: "atk", value: 0.08, cost: 2 },
@@ -175,13 +182,21 @@ const GameData = {
     { id: 6, name: "Obsidian Depths", level: 130, gateBoss: "Lava Behemoth" },
     { id: 7, name: "Astral Sanctum", level: 170, gateBoss: "Eternal Sentinel" }
   ],
+  resistanceProfiles: {
+    neutral: {},
+    armored: { physical: 0.8, melee: 0.85, magic: 1.1 },
+    swift: { ranged: 0.8, melee: 1.1 },
+    undead: { shadow: 0.7, holy: 1.3 },
+    elemental: { ice: 0.7, fire: 1.2, arcane: 1.1 },
+    boss: { physical: 0.9, magic: 0.9, holy: 0.9, shadow: 0.9 }
+  },
   enemyTemplates: {
-    hunt: { name: "Wilderness Stalker", hp: 80, atk: 8, def: 4 },
-    adventure: { name: "Wild Raider", hp: 120, atk: 10, def: 5 },
-    dungeon: { name: "Dungeon Fiend", hp: 140, atk: 11, def: 6 },
-    miniboss: { name: "Feral Champion", hp: 180, atk: 13, def: 7 },
-    boss: { name: "Ancient Titan", hp: 240, atk: 15, def: 8 },
-    gate: { name: "Gate Guardian", hp: 220, atk: 14, def: 8 }
+    hunt: { name: "Wilderness Stalker", hp: 80, atk: 8, def: 4, profile: "swift", traits: ["Beast", "Swift"] },
+    adventure: { name: "Wild Raider", hp: 120, atk: 10, def: 5, profile: "armored", traits: ["Humanoid", "Armored"] },
+    dungeon: { name: "Dungeon Fiend", hp: 140, atk: 11, def: 6, profile: "undead", traits: ["Undead"] },
+    miniboss: { name: "Feral Champion", hp: 180, atk: 13, def: 7, profile: "elemental", traits: ["Elemental"] },
+    boss: { name: "Ancient Titan", hp: 240, atk: 15, def: 8, profile: "boss", traits: ["Boss"] },
+    gate: { name: "Gate Guardian", hp: 220, atk: 14, def: 8, profile: "boss", traits: ["Gate Boss"] }
   },
   materials: [
     { id: "wood", name: "Ancient Wood", tier: 1, zoneMax: 2, type: "chop" },
@@ -266,6 +281,12 @@ const SAVE_KEYS = {
   backup: "epicAdventureSaveBackup"
 };
 
+function getDefaultSkillLoadouts() {
+  return Object.fromEntries(
+    Object.entries(GameData.classes).map(([className, classData]) => [className, classData.skills.slice(0, 2)])
+  );
+}
+
 const defaultState = (selectedClass = "Warrior") => {
   const playerClass = GameData.classes[selectedClass] ? selectedClass : "Warrior";
   const classData = GameData.classes[playerClass];
@@ -325,6 +346,7 @@ const defaultState = (selectedClass = "Warrior") => {
     epicCooldowns: {},
     log: [],
     battleSummary: "",
+    selectedSkills: getDefaultSkillLoadouts(),
     selectedFusion: [],
     selectedBreeding: [],
     eggBattleCount: 0
@@ -350,6 +372,7 @@ const ui = {
   inventoryFilter: document.getElementById("inventoryFilter"),
   inventorySort: document.getElementById("inventorySort"),
   sellAll: document.getElementById("sellAll"),
+  skillLoadout: document.getElementById("skillLoadout"),
   skillTree: document.getElementById("skillTree"),
   lifeSkills: document.getElementById("lifeSkills"),
   epicActions: document.getElementById("epicActions"),
@@ -532,6 +555,20 @@ function ensureStateIntegrity() {
     gems: Array.isArray(gear.gems) ? gear.gems : [],
     locked: Boolean(gear.locked)
   }));
+
+  const defaults = getDefaultSkillLoadouts();
+  state.selectedSkills = state.selectedSkills || {};
+  Object.keys(GameData.classes).forEach((className) => {
+    const pool = GameData.classes[className].skills;
+    const current = Array.isArray(state.selectedSkills[className]) ? state.selectedSkills[className] : defaults[className];
+    const valid = current.filter((skill) => pool.includes(skill));
+    while (valid.length < 2) {
+      const candidate = pool.find((skill) => !valid.includes(skill));
+      if (!candidate) break;
+      valid.push(candidate);
+    }
+    state.selectedSkills[className] = valid.slice(0, 2);
+  });
 }
 
 function activeTabName() {
@@ -681,6 +718,8 @@ function renderCombat() {
     ui.enemyPanel.innerHTML = `
       <div><strong>${state.enemy.name}</strong></div>
       <div class="resource hp"><div class="fill" style="width:${hpPercent}%"></div><span>${formatNumber(state.enemy.hp)}/${formatNumber(state.enemy.maxHP)} HP</span></div>
+      <div class="tooltip">Traits: ${(state.enemy.traits || []).join(", ") || "None"}</div>
+      <div class="tooltip">Resists: ${formatResistanceSummary(state.enemy.resistances)}</div>
     `;
   } else {
     ui.enemyPanel.innerHTML = "<div>No active enemy.</div>";
@@ -688,6 +727,19 @@ function renderCombat() {
 
   renderCombatButtons();
   ui.battleSummary.textContent = state.battleSummary || "Take an action to see results.";
+}
+
+function getActiveCombatSkills() {
+  const pool = GameData.classes[state.player.class].skills;
+  const selected = state.selectedSkills?.[state.player.class] || [];
+  const valid = selected.filter((skill) => pool.includes(skill));
+  while (valid.length < 2) {
+    const candidate = pool.find((skill) => !valid.includes(skill));
+    if (!candidate) break;
+    valid.push(candidate);
+  }
+  state.selectedSkills[state.player.class] = valid.slice(0, 2);
+  return state.selectedSkills[state.player.class];
 }
 
 function renderCombatButtons() {
@@ -703,10 +755,12 @@ function renderCombatButtons() {
     return `<button class="action" data-action="${action.id}" ${disabled ? "disabled" : ""}>${action.label}</button>`;
   });
 
-  const skillButtons = GameData.classes[state.player.class].skills.map((skill) => {
+  const activeSkills = getActiveCombatSkills();
+  const skillButtons = activeSkills.map((skill) => {
     const cooldown = cooldownRemaining(`skill-${skill}`);
     const disabled = !state.player.inCombat || state.player.resource < GameData.skills[skill].cost || cooldown > 0;
-    return `<button class="action" data-skill="${skill}" ${disabled ? "disabled" : ""}>
+    const tagLabel = (GameData.skills[skill].tags || ["physical"]).join("/");
+    return `<button class="action" data-skill="${skill}" title="Tags: ${tagLabel}" ${disabled ? "disabled" : ""}>
       ${skill} ${cooldown > 0 ? `(${Math.ceil(cooldown)}s)` : ""}
     </button>`;
   });
@@ -802,7 +856,27 @@ function gearStatLine(item) {
 }
 
 function renderSkillTree() {
-  const classTree = GameData.classes[state.player.class].trees;
+  const classData = GameData.classes[state.player.class];
+  const classTree = classData.trees;
+  const activeSkills = getActiveCombatSkills();
+  const skillOptions = classData.skills
+    .map((skill) => `<option value="${skill}">${skill}</option>`)
+    .join("");
+
+  ui.skillLoadout.innerHTML = `
+    <div class="skill-node">
+      <strong>Combat Skill Loadout (2 active in combat)</strong>
+      <div class="tooltip">Choose any 2 from ${classData.skills.length} skills for ${state.player.class}.</div>
+      <div class="fusion-controls">
+        <label>Slot 1<select data-loadout-slot="0">${skillOptions}</select></label>
+        <label>Slot 2<select data-loadout-slot="1">${skillOptions}</select></label>
+      </div>
+    </div>
+  `;
+
+  ui.skillLoadout.querySelector('[data-loadout-slot="0"]').value = activeSkills[0];
+  ui.skillLoadout.querySelector('[data-loadout-slot="1"]').value = activeSkills[1];
+
   const entries = Object.entries(classTree)
     .map(([branch, nodes]) => {
       const available = nodes.filter((node) => !state.player.unlockedNodes.includes(node) && prerequisitesMet(node));
@@ -827,6 +901,27 @@ function renderSkillTree() {
     .join("");
 
   ui.skillTree.innerHTML = `<div>Skill Points: ${state.player.skillPoints}</div>${entries}`;
+}
+
+function updateSkillLoadout(slotIndex, skillName) {
+  if (state.player.inCombat) {
+    logMessage("Cannot change combat skills during combat.");
+    renderSkillTree();
+    return;
+  }
+  const pool = GameData.classes[state.player.class].skills;
+  if (!pool.includes(skillName)) return;
+  const current = [...getActiveCombatSkills()];
+  const otherIndex = slotIndex === 0 ? 1 : 0;
+  if (current[otherIndex] === skillName) {
+    logMessage("Both active skill slots must be different.");
+    renderSkillTree();
+    return;
+  }
+  current[slotIndex] = skillName;
+  state.selectedSkills[state.player.class] = current;
+  logMessage(`Active skill slot ${slotIndex + 1} set to ${skillName}.`);
+  updateAll();
 }
 
 function prerequisitesMet(node) {
@@ -1076,7 +1171,9 @@ function startCombat(type, isGate = false, zoneOverride = null) {
     atk: Math.round(template.atk + enemyLevel * 0.5),
     def: Math.round(template.def + enemyLevel * 0.3),
     type,
-    zoneId: zone.id
+    zoneId: zone.id,
+    traits: template.traits || [],
+    resistances: { ...(GameData.resistanceProfiles[template.profile] || {}) }
   };
   state.enemy = enemy;
   state.player.inCombat = true;
@@ -1093,9 +1190,10 @@ function performPlayerAction(action, skillName) {
 
   let summary = "";
   if (action === "attack") {
-    const damage = calculateDamage(baseStats().atk, state.enemy.def);
-    summary = `You strike for ${formatNumber(damage)} damage.`;
-    state.enemy.hp -= damage;
+    const base = calculateDamage(baseStats().atk, state.enemy.def);
+    const resolved = resolveTagResistance(base, state.enemy, ["physical", "melee"]);
+    summary = `You strike for ${formatNumber(resolved.damage)} damage.${resolved.note}`;
+    state.enemy.hp -= resolved.damage;
   }
   if (action === "heal") {
     const potion = state.inventory.consumables.find((item) => item.id === "potion" && item.qty > 0);
@@ -1135,10 +1233,12 @@ function performPlayerAction(action, skillName) {
 
 function applySkill(name, skill) {
   const stats = baseStats();
+  const skillTags = skill.tags || ["physical"];
   const applyDamage = (scale) => {
-    const damage = calculateDamage(stats.atk * scale, state.enemy.def);
-    state.enemy.hp -= damage;
-    logMessage(`${name} hits for ${formatNumber(damage)}.`);
+    const base = calculateDamage(stats.atk * scale, state.enemy.def);
+    const resolved = resolveTagResistance(base, state.enemy, skillTags);
+    state.enemy.hp -= resolved.damage;
+    logMessage(`${name} hits for ${formatNumber(resolved.damage)}.${resolved.note}`);
   };
   const applyHeal = (scale) => {
     const healAmount = Math.round(state.player.maxHP * scale);
@@ -1171,6 +1271,46 @@ function applySecondary(effect) {
     const healAmount = Math.round(state.player.maxHP * effect.scale);
     state.player.currentHP = Math.min(state.player.maxHP, state.player.currentHP + healAmount);
   }
+}
+
+
+function resolveTagResistance(baseDamage, enemy, tags = []) {
+  if (!enemy || !enemy.resistances || tags.length === 0) {
+    return { damage: baseDamage, note: "" };
+  }
+
+  let multiplier = 1;
+  let strongestTag = null;
+  let strongestDelta = 0;
+
+  tags.forEach((tag) => {
+    const tagMult = enemy.resistances[tag];
+    if (typeof tagMult === "number") {
+      multiplier *= tagMult;
+      const delta = Math.abs(tagMult - 1);
+      if (delta > strongestDelta) {
+        strongestDelta = delta;
+        strongestTag = { tag, mult: tagMult };
+      }
+    }
+  });
+
+  const damage = Math.max(1, Math.round(baseDamage * multiplier));
+  let note = "";
+  if (strongestTag && strongestTag.mult > 1.05) {
+    note = ` Vulnerable to ${strongestTag.tag} (+${Math.round((strongestTag.mult - 1) * 100)}%).`;
+  } else if (strongestTag && strongestTag.mult < 0.95) {
+    note = ` Resisted ${strongestTag.tag} (-${Math.round((1 - strongestTag.mult) * 100)}%).`;
+  }
+
+  return { damage, note };
+}
+
+function formatResistanceSummary(resistances = {}) {
+  const entries = Object.entries(resistances)
+    .map(([tag, mult]) => `${tag}:${Math.round(mult * 100)}%`)
+    .join(" • ");
+  return entries || "None";
 }
 
 function enemyTurn() {
@@ -1990,6 +2130,12 @@ function setupEventListeners() {
       }
       renderFusionSelection();
     }
+  });
+
+  document.body.addEventListener("change", (event) => {
+    const select = event.target.closest("select[data-loadout-slot]");
+    if (!select) return;
+    updateSkillLoadout(Number(select.dataset.loadoutSlot), select.value);
   });
 
   ui.navToggle.addEventListener("click", handleNavToggle);
