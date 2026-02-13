@@ -1,4 +1,4 @@
-const CACHE_NAME = "epic-adventure-cache-v1";
+const CACHE_NAME = "epic-adventure-cache-v2";
 const CORE_ASSETS = ["/", "/index.html", "/styles.css", "/game.js", "/manifest.json"];
 
 self.addEventListener("install", (event) => {

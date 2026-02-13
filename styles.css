@@ -9,8 +9,8 @@
   --danger: #ff6b6b;
   --success: #4cd97b;
   --scale: 1;
-  --nav-width: 90px;
-  --nav-collapsed: 56px;
+  --nav-width: 64px;
+  --nav-collapsed: 64px;
   --radius: 14px;
   --shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
 }
@@ -47,8 +47,11 @@ body {
 
 .nav {
   width: var(--nav-width);
+  min-width: var(--nav-width);
+  max-width: var(--nav-width);
+  flex: 0 0 var(--nav-width);
   background: var(--panel);
-  padding: 12px 10px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -102,7 +105,7 @@ body[data-nav="collapsed"] .nav {
 .tab-button {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0;
   padding: 10px;
   border-radius: 10px;
   border: 1px solid transparent;
@@ -111,6 +114,11 @@ body[data-nav="collapsed"] .nav {
   cursor: pointer;
   font-size: 0.95rem;
   min-height: 40px;
+}
+
+.tab-button .label,
+.brand {
+  display: none;
 }
 
 .tab-button .icon {
@@ -378,6 +386,11 @@ button.action[disabled] {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+#customScaleValue {
+  color: var(--muted);
+  font-size: 0.9em;
 }
 
 .fusion-controls {

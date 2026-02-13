@@ -282,6 +282,7 @@ const defaultState = () => {
       cooldowns: {},
       settings: {
         uiScale: "medium",
+        customScale: 100,
         animations: true,
         lootFilterMode: "normal",
         colorblind: false,
@@ -341,6 +342,8 @@ const ui = {
   dragonList: document.getElementById("dragonList"),
   shopList: document.getElementById("shopList"),
   uiScale: document.getElementById("uiScale"),
+  customScale: document.getElementById("customScale"),
+  customScaleValue: document.getElementById("customScaleValue"),
   toggleAnimations: document.getElementById("toggleAnimations"),
   toggleColorblind: document.getElementById("toggleColorblind"),
   lootFilterMode: document.getElementById("lootFilterMode"),
@@ -445,7 +448,11 @@ function updateAll() {
 
 function applySettings() {
   const scaleMap = { small: 0.95, medium: 1, large: 1.1 };
-  document.documentElement.style.setProperty("--scale", scaleMap[state.player.settings.uiScale]);
+  const customScale = Math.min(160, Math.max(60, Number(state.player.settings.customScale || 100))) / 100;
+  const finalScale = state.player.settings.uiScale === "custom"
+    ? customScale
+    : (scaleMap[state.player.settings.uiScale] || 1);
+  document.documentElement.style.setProperty("--scale", finalScale);
   document.body.dataset.theme = state.player.settings.colorblind ? "colorblind" : "dark";
   document.body.dataset.nav = state.player.settings.mobileLayout ? "drawer" : document.body.dataset.nav;
   document.body.classList.toggle("no-anim", !state.player.settings.animations);
@@ -776,6 +783,9 @@ function renderShop() {
 
 function renderSettings() {
   ui.uiScale.value = state.player.settings.uiScale;
+  ui.customScale.value = String(state.player.settings.customScale || 100);
+  ui.customScaleValue.textContent = `${ui.customScale.value}%`;
+  ui.customScale.disabled = state.player.settings.uiScale !== "custom";
   ui.toggleAnimations.checked = state.player.settings.animations;
   ui.toggleColorblind.checked = state.player.settings.colorblind;
   ui.lootFilterMode.value = state.player.settings.lootFilterMode;
@@ -1503,6 +1513,9 @@ function switchTab(tab) {
 
 function handleSettingsChange() {
   state.player.settings.uiScale = ui.uiScale.value;
+  state.player.settings.customScale = Number(ui.customScale.value);
+  ui.customScaleValue.textContent = `${ui.customScale.value}%`;
+  ui.customScale.disabled = state.player.settings.uiScale !== "custom";
   state.player.settings.animations = ui.toggleAnimations.checked;
   state.player.settings.colorblind = ui.toggleColorblind.checked;
   state.player.settings.lootFilterMode = ui.lootFilterMode.value;
@@ -1543,7 +1556,25 @@ function updateOrientation() {
 
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js");
+    navigator.serviceWorker.register("sw.js").then((registration) => {
+      registration.update();
+      registration.addEventListener("updatefound", () => {
+        const worker = registration.installing;
+        if (!worker) return;
+        worker.addEventListener("statechange", () => {
+          if (worker.state === "activated") {
+            logMessage("Update applied. Refreshing UI cache.");
+          }
+        });
+      });
+    });
+
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
   }
 }
 
@@ -1671,6 +1702,8 @@ function setupEventListeners() {
   ui.sellAll.addEventListener("click", sellAllFiltered);
   ui.resetSave.addEventListener("click", resetSave);
   ui.uiScale.addEventListener("change", handleSettingsChange);
+  ui.customScale.addEventListener("input", handleSettingsChange);
+  ui.customScale.addEventListener("change", handleSettingsChange);
   ui.toggleAnimations.addEventListener("change", handleSettingsChange);
   ui.toggleColorblind.addEventListener("change", handleSettingsChange);
   ui.lootFilterMode.addEventListener("change", handleSettingsChange);
