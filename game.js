@@ -615,8 +615,18 @@ function ensureStateIntegrity() {
   state.inventory.gear = (state.inventory.gear || []).map((gear) => ({
     ...gear,
     gems: Array.isArray(gear.gems) ? gear.gems : [],
-    locked: Boolean(gear.locked)
+    locked: Boolean(gear.locked),
+    gearScore: typeof gear.gearScore === "number" ? gear.gearScore : Math.round(((gear.stats?.atk || 0) * 1.4) + ((gear.stats?.def || 0) * 1.2) + ((gear.stats?.hp || 0) * 0.18) + ((gear.stats?.crit || 0) * 8))
   }));
+
+  Object.keys(state.equipment || {}).forEach((slot) => {
+    const gear = state.equipment[slot];
+    if (!gear) return;
+    gear.gems = Array.isArray(gear.gems) ? gear.gems : [];
+    gear.gearScore = typeof gear.gearScore === "number"
+      ? gear.gearScore
+      : Math.round(((gear.stats?.atk || 0) * 1.4) + ((gear.stats?.def || 0) * 1.2) + ((gear.stats?.hp || 0) * 0.18) + ((gear.stats?.crit || 0) * 8));
+  });
 
   const defaults = getDefaultSkillLoadouts();
   state.selectedSkills = state.selectedSkills || {};
@@ -781,12 +791,21 @@ function refreshStats() {
 function renderCombat() {
   refreshStats();
   const player = state.player;
+  const equippedRows = ["weapon", "armor", "helmet", "boots", "accessory"]
+    .map((slot) => {
+      const item = state.equipment[slot];
+      if (!item) return `<div>${slot}: Empty</div>`;
+      return `<div>${slot}: ${item.name} (${gearScore(item)}) <button class="secondary" data-unequip="${slot}">Unequip</button></div>`;
+    })
+    .join("");
   ui.playerPanel.innerHTML = `
     <div><strong>Player</strong></div>
     <div>HP: ${formatNumber(player.currentHP)}/${formatNumber(player.maxHP)}</div>
     <div>${playerResourceLabel()}: ${formatNumber(player.resource)}/${formatNumber(player.resourceMax)}</div>
     <div>ATK ${formatNumber(baseStats().atk)} | DEF ${formatNumber(baseStats().def)}</div>
     <div>CRIT ${formatNumber(baseStats().crit * 100)}% | SPD ${formatNumber(baseStats().spd)}</div>
+    <div class="tooltip">Gear Score Cap: ${Number.isFinite(gearScoreCap()) ? gearScoreCap() : "∞"} | Equipped: ${formatNumber(equippedGearScoreTotal())}</div>
+    <div>${equippedRows}</div>
   `;
   if (state.enemy) {
     const hpPercent = Math.max(0, state.enemy.hp / state.enemy.maxHP) * 100;
@@ -890,16 +909,19 @@ function renderInventory() {
       if (item.type === "gear") {
         const canSocket = state.inventory.gems.some((gem) => gem.qty > 0);
         const canRemove = item.gearTier >= 4 && item.gems.length > 0;
+        const compare = compareVsEquipped(item);
         return `
           <div class="inventory-item ${item.locked ? "locked" : ""}" data-item="${item.id}">
             <div class="meta">
-              <strong class="rarity" style="color:${item.color}">${item.name}${item.locked ? " 🔒" : ""}</strong>
+              <strong class="rarity" style="color:${item.color}">${item.name}${item.locked ? " 🔒" : ""} <span>${compare.badge}</span></strong>
               <span class="tooltip">${item.rarity} • Tier ${item.gearTier} • iLvl ${item.itemLevel}</span>
               <span class="tooltip">${gearStatLine(item)}${item.gems.length ? ` • Gems: ${item.gems.map((gem) => gem.name).join(", ")}` : ""}</span>
+              <span class="tooltip">GearScore ${gearScore(item)} (ATK ${(item.stats.atk || 0) * 1.4} + DEF ${(item.stats.def || 0) * 1.2} + HP ${Math.round((item.stats.hp || 0) * 0.18)} + CRIT ${(item.stats.crit || 0) * 8}) • Δ ${compare.delta >= 0 ? "+" : ""}${formatNumber(compare.delta)} vs equipped</span>
             </div>
             <div>
               <button class="secondary" data-lock="${item.id}">${item.locked ? "Unlock" : "Lock"}</button>
               <button class="secondary" data-equip="${item.id}" ${item.locked ? "disabled" : ""}>Equip</button>
+              <button class="secondary" data-swap="${item.id}" ${item.locked ? "disabled" : ""}>Swap</button>
               <button class="secondary" data-sell="${item.id}" ${item.locked ? "disabled" : ""}>Sell</button>
               ${canSocket ? `<button class="secondary" data-socket="${item.id}">Socket Gem</button>` : ""}
               ${canRemove ? `<button class="secondary" data-remove-gem="${item.id}">Remove Gem</button>` : ""}
@@ -928,6 +950,31 @@ function gearStatLine(item) {
   return Object.entries(item.stats)
     .map(([key, value]) => `${key.toUpperCase()} +${formatNumber(value)}`)
     .join(" • ");
+}
+
+function gearScore(item) {
+  if (!item) return 0;
+  if (typeof item.gearScore === "number") return item.gearScore;
+  const stats = item.stats || {};
+  return Math.round((stats.atk || 0) * 1.4 + (stats.def || 0) * 1.2 + (stats.hp || 0) * 0.18 + (stats.crit || 0) * 8);
+}
+
+function gearScoreCap(level = state.player.level) {
+  if (level <= 15) return 38;
+  if (level <= 40) return 85;
+  return Infinity;
+}
+
+function equippedGearScoreTotal() {
+  return Object.values(state.equipment).filter(Boolean).reduce((sum, item) => sum + gearScore(item), 0);
+}
+
+function compareVsEquipped(item) {
+  const equipped = state.equipment[item.slot];
+  if (!equipped) return { delta: gearScore(item), badge: "▲" };
+  const delta = gearScore(item) - gearScore(equipped);
+  const badge = delta > 0 ? "▲" : delta < 0 ? "▼" : "＝";
+  return { delta, badge };
 }
 
 function renderSkillTree() {
@@ -1676,13 +1723,46 @@ function rollLoot(zoneId = state.player.currentZone) {
   return { gold };
 }
 
+function rarityBudgetBand(rarityName) {
+  const bands = {
+    Common: [0.9, 1.0],
+    Uncommon: [1.02, 1.12],
+    Rare: [1.15, 1.3],
+    Epic: [1.35, 1.55],
+    Legendary: [1.8, 2.05]
+  };
+  return bands[rarityName] || [1, 1.1];
+}
+
+function rollGearStats(itemLevel, tier, rarityName) {
+  const [low, high] = rarityBudgetBand(rarityName);
+  const baseBudget = itemLevel * 1.5 + tier * 8;
+  const budget = baseBudget * (low + Math.random() * (high - low));
+  const mix = {
+    atk: 0.30 + Math.random() * 0.12,
+    def: 0.26 + Math.random() * 0.12,
+    hp: 0.30 + Math.random() * 0.14,
+    crit: 0.06 + Math.random() * 0.06
+  };
+  const totalMix = Object.values(mix).reduce((a, b) => a + b, 0);
+  const norm = Object.fromEntries(Object.entries(mix).map(([k, v]) => [k, v / totalMix]));
+  const stats = {
+    atk: Math.max(1, Math.round((budget * norm.atk) / 1.4)),
+    def: Math.max(1, Math.round((budget * norm.def) / 1.2)),
+    hp: Math.max(1, Math.round((budget * norm.hp) / 0.18)),
+    crit: Math.max(0, Math.round((budget * norm.crit) / 8))
+  };
+  const score = Math.round(budget);
+  return { stats, score };
+}
+
 function generateGear(zoneId) {
   const slotOptions = ["weapon", "armor", "helmet", "boots", "accessory"];
   const slot = slotOptions[Math.floor(Math.random() * slotOptions.length)];
   const rarity = rollRarity(zoneId);
   const gearTier = Math.min(5, Math.ceil(zoneId / 2));
   const itemLevel = zoneId * 5 + Math.floor(Math.random() * 5);
-  const stats = rollGearStats(gearTier, rarity.multiplier);
+  const rolled = rollGearStats(itemLevel, gearTier, rarity.name);
   return {
     id: crypto.randomUUID(),
     name: `${rarity.name} ${slot}`,
@@ -1691,22 +1771,11 @@ function generateGear(zoneId) {
     color: rarity.color,
     gearTier,
     itemLevel,
-    stats,
+    stats: rolled.stats,
+    gearScore: rolled.score,
     gems: [],
     locked: false
   };
-}
-
-function rollGearStats(tier, multiplier) {
-  const statPool = ["atk", "def", "hp", "crit"];
-  const statCount = Math.min(3, 1 + Math.floor(Math.random() * 3));
-  const stats = {};
-  for (let i = 0; i < statCount; i += 1) {
-    const stat = statPool[Math.floor(Math.random() * statPool.length)];
-    const base = 4 * tier;
-    stats[stat] = Math.round((base + Math.random() * base) * multiplier);
-  }
-  return stats;
 }
 
 function rollRarity(zoneId) {
@@ -1716,10 +1785,8 @@ function rollRarity(zoneId) {
     if (index <= 1) return weight + Math.max(0, 6 - zoneShift * 2);
     return Math.max(1, weight + zoneShift * index * 0.8);
   });
-  if (zoneId <= 2) {
-    const legendaryIndex = GameData.rarities.findIndex((rarity) => rarity.name === "Legendary");
-    if (legendaryIndex >= 0) weights[legendaryIndex] = 0;
-  }
+  const legendaryIndex = GameData.rarities.findIndex((rarity) => rarity.name === "Legendary");
+  if (legendaryIndex >= 0 && zoneId < 5) weights[legendaryIndex] = 0;
   const total = weights.reduce((sum, w) => sum + w, 0);
   let roll = Math.random() * total;
   for (let i = 0; i < GameData.rarities.length; i += 1) {
@@ -1887,10 +1954,31 @@ function equipItem(itemId) {
   const item = state.inventory.gear.find((gear) => gear.id === itemId);
   if (!item) return;
   const slot = item.slot;
-  if (state.equipment[slot]) state.inventory.gear.push(state.equipment[slot]);
+  const current = state.equipment[slot];
+  const currentTotal = equippedGearScoreTotal();
+  const projected = currentTotal - (current ? gearScore(current) : 0) + gearScore(item);
+  const cap = gearScoreCap();
+  if (Number.isFinite(cap) && projected > cap) {
+    logMessage(`Equip blocked by early gear cap (${cap}).`);
+    return;
+  }
+  if (current) state.inventory.gear.push(current);
   state.equipment[slot] = item;
   state.inventory.gear = state.inventory.gear.filter((gear) => gear.id !== itemId);
   logMessage(`${item.name} equipped.`);
+  updateAll();
+}
+
+function swapGear(itemId) {
+  equipItem(itemId);
+}
+
+function unequipSlot(slot) {
+  const item = state.equipment[slot];
+  if (!item) return;
+  state.inventory.gear.push(item);
+  state.equipment[slot] = null;
+  logMessage(`${item.name} unequipped.`);
   updateAll();
 }
 
@@ -2097,7 +2185,7 @@ function socketGem(gearId) {
   if (!gear || !gem) return;
 
   const constraints = gemConstraintsForLevel(state.player.level);
-  if (totalSocketedGems() >= constraints.maxSockets) {
+  if (totalSocketedGems() >= constraints.maxSockets || gear.gems.length >= constraints.maxSockets) {
     logMessage(`Gem socket cap reached for your level (max ${constraints.maxSockets}).`);
     return;
   }
@@ -2364,6 +2452,16 @@ function setupEventListeners() {
     const equipButton = event.target.closest("button[data-equip]");
     if (equipButton) {
       equipItem(equipButton.dataset.equip);
+      return;
+    }
+    const swapButton = event.target.closest("button[data-swap]");
+    if (swapButton) {
+      swapGear(swapButton.dataset.swap);
+      return;
+    }
+    const unequipButton = event.target.closest("button[data-unequip]");
+    if (unequipButton) {
+      unequipSlot(unequipButton.dataset.unequip);
       return;
     }
     const sellButton = event.target.closest("button[data-sell]");
