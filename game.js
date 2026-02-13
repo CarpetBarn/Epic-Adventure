@@ -2,15 +2,15 @@ const GameData = {
   version: 1,
   xp: {
     base: 90,
-    exponent: 1.08,
+    exponent: 1.10,
     maxLevel: 200,
     rewards: {
-      hunt: 30,
-      adventure: 75,
-      dungeon: 130,
+      hunt: 20,
+      adventure: 55,
+      dungeon: 110,
       miniboss: 250,
       boss: 300,
-      auto: 15
+      auto: 10
     }
   },
   classes: {
@@ -167,11 +167,11 @@ const GameData = {
     { name: "Legendary", color: "#ffb347", multiplier: 1.6, weight: 1 }
   ],
   gemBonuses: {
-    1: { atk: 2 },
-    2: { atk: 4 },
-    3: { atk: 6 },
-    4: { atk: 8 },
-    5: { atk: 10 }
+    1: { atk: 1.0 },
+    2: { atk: 1.5 },
+    3: { atk: 2.0 },
+    4: { atk: 2.5 },
+    5: { atk: 3.0 }
   },
   zones: [
     { id: 1, name: "Greenwild", level: 1, gateBoss: "Thorn Guardian" },
@@ -268,6 +268,12 @@ const GameData = {
     { id: "gem", name: "Lesser Gem", cost: 80, type: "gem", tier: 1, rarity: "Uncommon" }
   ]
 };
+
+Object.values(GameData.skillNodes).forEach((node) => {
+  const isKeystone = Boolean(node.prereq) && node.cost >= 3;
+  const isMid = !isKeystone && (Boolean(node.prereq) || node.cost >= 3);
+  node.value = isKeystone ? 0.06 : (isMid ? 0.04 : 0.03);
+});
 
 const SAVE_VERSION = 2;
 const SAVE_KEYS = {
@@ -412,6 +418,55 @@ function formatNumber(value) {
 
 function xpToNextLevel(level) {
   return Math.floor(GameData.xp.base * Math.pow(GameData.xp.exponent, level - 1));
+}
+
+function levelGrowth(level) {
+  const gainedLevels = Math.max(0, level - 1);
+  const earlyLevels = Math.min(gainedLevels, 39);
+  const lateLevels = Math.max(0, level - 40);
+  return {
+    hp: earlyLevels * 4 + lateLevels * 3,
+    atk: earlyLevels * 0.4 + lateLevels * 0.3,
+    def: earlyLevels * 0.35 + lateLevels * 0.25,
+    crit: gainedLevels * 0.001
+  };
+}
+
+function nodeBonusCap(stat, level) {
+  const caps = {
+    atk: Math.min(0.20, 0.012 * level),
+    def: Math.min(0.22, 0.013 * level),
+    hp: Math.min(0.26, 0.015 * level),
+    crit: Math.min(0.10, 0.006 * level)
+  };
+  return caps[stat] ?? Infinity;
+}
+
+function gemConstraintsForLevel(level) {
+  if (level <= 15) return { maxSockets: 1, maxTier: 1, atkBudget: 2 };
+  if (level <= 40) return { maxSockets: 2, maxTier: 3, atkBudget: 8 };
+  return { maxSockets: 5, maxTier: 5, atkBudget: Infinity };
+}
+
+function gemAtkValue(tier, level) {
+  const base = GameData.gemBonuses[tier]?.atk || 1;
+  const scalar = 1 + Math.min(0.8, level * 0.01);
+  return Math.max(1, Math.floor(base * scalar));
+}
+
+function allOwnedGear() {
+  return [...state.inventory.gear, ...Object.values(state.equipment).filter(Boolean)];
+}
+
+function totalSocketedGems() {
+  return allOwnedGear().reduce((sum, gear) => sum + (gear.gems?.length || 0), 0);
+}
+
+function totalGemAtkFromSockets(level) {
+  return allOwnedGear().reduce(
+    (sum, gear) => sum + (gear.gems || []).reduce((sub, gem) => sub + gemAtkValue(gem.tier, level), 0),
+    0
+  );
 }
 
 function logMessage(message) {
@@ -633,6 +688,7 @@ let statsCache = { signature: "", value: null };
 function buildStatsSignature() {
   return JSON.stringify({
     className: state.player.class,
+    level: state.player.level,
     unlocked: state.player.unlockedNodes,
     equipment: state.equipment,
     dragons: state.inventory.dragons
@@ -646,6 +702,15 @@ function baseStats() {
   }
 
   const classStats = GameData.classes[state.player.class].stats;
+  const growth = levelGrowth(state.player.level);
+  const effectiveClassStats = {
+    hp: classStats.hp + growth.hp,
+    atk: classStats.atk + growth.atk,
+    def: classStats.def + growth.def,
+    crit: classStats.crit + growth.crit,
+    spd: classStats.spd
+  };
+  const constraints = gemConstraintsForLevel(state.player.level);
   const equipmentBonus = Object.values(state.equipment)
     .filter(Boolean)
     .reduce(
@@ -653,17 +718,13 @@ function baseStats() {
         Object.entries(gear.stats).forEach(([stat, value]) => {
           acc[stat] = (acc[stat] || 0) + value;
         });
-        gear.gems.forEach((gem) => {
-          const bonus = GameData.gemBonuses[gem.tier] || {};
-          Object.entries(bonus).forEach(([stat, value]) => {
-            acc[stat] = (acc[stat] || 0) + value;
-          });
-        });
         return acc;
       },
       {}
     );
-  const bonus = state.player.unlockedNodes.reduce(
+  const gemAtkBonus = Math.min(totalGemAtkFromSockets(state.player.level), constraints.atkBudget);
+  equipmentBonus.atk = (equipmentBonus.atk || 0) + gemAtkBonus;
+  const rawBonus = state.player.unlockedNodes.reduce(
     (acc, node) => {
       const data = GameData.skillNodes[node];
       acc[data.stat] = (acc[data.stat] || 0) + data.value;
@@ -671,6 +732,13 @@ function baseStats() {
     },
     {}
   );
+  const bonus = {
+    ...rawBonus,
+    atk: Math.min(rawBonus.atk || 0, nodeBonusCap("atk", state.player.level)),
+    def: Math.min(rawBonus.def || 0, nodeBonusCap("def", state.player.level)),
+    hp: Math.min(rawBonus.hp || 0, nodeBonusCap("hp", state.player.level)),
+    crit: Math.min(rawBonus.crit || 0, nodeBonusCap("crit", state.player.level))
+  };
   const dragonBonus = state.inventory.dragons.reduce(
     (acc, dragon) => {
       if (dragon.bonusType) acc[dragon.bonusType] = (acc[dragon.bonusType] || 0) + dragon.value;
@@ -678,10 +746,10 @@ function baseStats() {
     },
     {}
   );
-  const maxHP = Math.round(classStats.hp * (1 + (bonus.hp || 0) + (dragonBonus.hp || 0)) + (equipmentBonus.hp || 0));
-  const atk = Math.round(classStats.atk * (1 + (bonus.atk || 0) + (dragonBonus.atk || 0)) + (equipmentBonus.atk || 0));
-  const def = Math.round(classStats.def * (1 + (bonus.def || 0) + (dragonBonus.def || 0)) + (equipmentBonus.def || 0));
-  const crit = classStats.crit + (bonus.crit || 0) + ((equipmentBonus.crit || 0) / 100);
+  const maxHP = Math.round(effectiveClassStats.hp * (1 + (bonus.hp || 0) + (dragonBonus.hp || 0)) + (equipmentBonus.hp || 0));
+  const atk = Math.round(effectiveClassStats.atk * (1 + (bonus.atk || 0) + (dragonBonus.atk || 0)) + (equipmentBonus.atk || 0));
+  const def = Math.round(effectiveClassStats.def * (1 + (bonus.def || 0) + (dragonBonus.def || 0)) + (equipmentBonus.def || 0));
+  const crit = effectiveClassStats.crit + (bonus.crit || 0) + ((equipmentBonus.crit || 0) / 100);
   const spd = classStats.spd + (bonus.spd || 0);
   const resourceMax = Math.round(
     GameData.classes[state.player.class].resource.max * (1 + (bonus.resource || 0) + (dragonBonus.resource || 0))
@@ -1449,6 +1517,10 @@ function rollRarity(zoneId) {
     if (index <= 1) return weight + Math.max(0, 6 - zoneShift * 2);
     return Math.max(1, weight + zoneShift * index * 0.8);
   });
+  if (zoneId <= 2) {
+    const legendaryIndex = GameData.rarities.findIndex((rarity) => rarity.name === "Legendary");
+    if (legendaryIndex >= 0) weights[legendaryIndex] = 0;
+  }
   const total = weights.reduce((sum, w) => sum + w, 0);
   let roll = Math.random() * total;
   for (let i = 0; i < GameData.rarities.length; i += 1) {
@@ -1795,10 +1867,27 @@ function socketGem(gearId) {
   const gear = state.inventory.gear.find((item) => item.id === gearId);
   const gem = state.inventory.gems.find((item) => item.qty > 0);
   if (!gear || !gem) return;
+
+  const constraints = gemConstraintsForLevel(state.player.level);
+  if (totalSocketedGems() >= constraints.maxSockets) {
+    logMessage(`Gem socket cap reached for your level (max ${constraints.maxSockets}).`);
+    return;
+  }
+  if (gem.tier > constraints.maxTier) {
+    logMessage(`Your level allows only gem tier ${constraints.maxTier} or lower.`);
+    return;
+  }
   if (gem.tier > gear.gearTier) {
     logMessage("Gem tier too high for this gear.");
     return;
   }
+
+  const projectedGemAtk = totalGemAtkFromSockets(state.player.level) + gemAtkValue(gem.tier, state.player.level);
+  if (projectedGemAtk > constraints.atkBudget) {
+    logMessage(`Gem ATK budget exceeded for your level (max ${constraints.atkBudget}).`);
+    return;
+  }
+
   gem.qty -= 1;
   if (gem.qty <= 0) state.inventory.gems = state.inventory.gems.filter((item) => item.qty > 0);
   gear.gems.push({ name: gem.name, tier: gem.tier, rarity: gem.rarity });
