@@ -300,7 +300,24 @@ Object.values(GameData.skillNodes).forEach((node) => {
   node.value = isKeystone ? 0.06 : (isMid ? 0.04 : 0.03);
 });
 
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
+function defaultSettings() {
+  return {
+    uiScale: "medium",
+    customScale: 100,
+    animations: true,
+    lootFilterMode: "normal",
+    colorblind: false,
+    mobileLayout: false,
+    compactNav: true,
+    compactUi: false,
+    combatLogVerbosity: "concise",
+    advancedTooltips: true,
+    reducedMotion: false,
+    audioMuted: false
+  };
+}
+
 const SAVE_KEYS = {
   meta: "epicAdventureSaveMeta",
   player: "epicAdventureSavePlayer",
@@ -355,15 +372,7 @@ const defaultState = (selectedClass = "Warrior") => {
           { id: "dungeon", name: "Dungeon", equipmentSnapshot: { weapon: null, armor: null, helmet: null, boots: null, accessory: null } }
         ]
       },
-      settings: {
-        uiScale: "medium",
-        customScale: 100,
-        animations: true,
-        lootFilterMode: "normal",
-        colorblind: false,
-        mobileLayout: false,
-        compactNav: true
-      }
+      settings: defaultSettings()
     },
     enemy: null,
     inventory: {
@@ -437,6 +446,13 @@ const ui = {
   lootFilterMode: document.getElementById("lootFilterMode"),
   toggleMobileLayout: document.getElementById("toggleMobileLayout"),
   toggleCompactNav: document.getElementById("toggleCompactNav"),
+  toggleCompactUi: document.getElementById("toggleCompactUi"),
+  toggleAdvancedTooltips: document.getElementById("toggleAdvancedTooltips"),
+  toggleReducedMotion: document.getElementById("toggleReducedMotion"),
+  toggleAudioMuted: document.getElementById("toggleAudioMuted"),
+  combatLogVerbosity: document.getElementById("combatLogVerbosity"),
+  resetSettings: document.getElementById("resetSettings"),
+  settingsTabs: document.getElementById("settingsTabs"),
   newGameClass: document.getElementById("newGameClass"),
   startNewGame: document.getElementById("startNewGame"),
   exportSave: document.getElementById("exportSave"),
@@ -621,7 +637,9 @@ function logMessage(message, category = "system", group = null) {
 
 function renderLog() {
   const filter = state.logFilter || "all";
-  const entries = state.log.filter((entry) => filter === "all" || (entry.category || "system") === filter);
+  const entries = state.log
+    .filter((entry) => filter === "all" || (entry.category || "system") === filter)
+    .slice(0, state.player.settings.combatLogVerbosity === "verbose" ? 80 : 30);
   const html = [];
   let lastGroup = null;
   entries.forEach((entry) => {
@@ -771,6 +789,14 @@ function migrateSaveBundle(bundle) {
     };
     migrated.meta.version = 5;
   }
+  if (migrated.meta.version < 6) {
+    migrated.player = migrated.player || {};
+    migrated.player.settings = {
+      ...defaultSettings(),
+      ...(migrated.player.settings || {})
+    };
+    migrated.meta.version = 6;
+  }
   return migrated;
 }
 
@@ -886,6 +912,7 @@ function ensureStateIntegrity() {
     rarity: gem.rarity || "Uncommon"
   }));
   state.player.preparedBuffs = Array.isArray(state.player.preparedBuffs) ? state.player.preparedBuffs : [];
+  state.player.settings = { ...defaultSettings(), ...(state.player.settings || {}) };
   state.combatTurn = Number.isFinite(state.combatTurn) ? state.combatTurn : 0;
   state.logFilter = state.logFilter || "all";
   state.logAutoScrollPaused = Boolean(state.logAutoScrollPaused);
@@ -980,7 +1007,10 @@ function applySettings() {
   document.body.dataset.theme = state.player.settings.colorblind ? "colorblind" : "dark";
   document.body.dataset.nav = state.player.settings.mobileLayout ? "drawer" : document.body.dataset.nav;
   document.body.dataset.navstyle = state.player.settings.compactNav ? "compact" : "cozy";
-  document.body.classList.toggle("no-anim", !state.player.settings.animations);
+  document.body.dataset.density = state.player.settings.compactUi ? "compact" : "normal";
+  document.body.dataset.tooltips = state.player.settings.advancedTooltips ? "advanced" : "basic";
+  const reduced = state.player.settings.reducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.body.classList.toggle("no-anim", !state.player.settings.animations || reduced);
 }
 
 function updatePlayerMeta() {
@@ -1515,33 +1545,60 @@ function prerequisitesMet(node) {
   return !prereq || state.player.unlockedNodes.includes(prereq);
 }
 
-function renderLifeSkills() {
-  ui.lifeSkills.innerHTML = GameData.lifeSkills
-    .map((skill) => {
-      const data = state.lifeSkills[skill];
-      const ready = Date.now() >= data.cooldownUntil;
-      return ready
-        ? `<div class="life-item">
-            <strong>${skill}</strong>
-            <div>Lv ${data.level}/100 • XP ${formatNumber(data.xp)}/${formatNumber(data.xpToNext)}</div>
-            <div class="tooltip">Breakpoints: ${GameData.lifeSkillBreakpoints.join("/")}</div>
-            <button class="secondary" data-life="${skill}">Practice</button>
-          </div>`
-        : "";
-    })
-    .join("") || "All skills on cooldown.";
+function lifeSkillMeta(skill) {
+  const iconMap = {
+    "Mining": "⛏️", "Foraging": "🌿", "Fishing": "🎣", "Hunting": "🏹",
+    "Blacksmithing": "🛡️", "Alchemy": "⚗️", "Cooking": "🍲", "Enchanting": "✨", "Dragon Handling": "🐉"
+  };
+  const short = {
+    "Mining": "Armor penetration and ore yield.",
+    "Foraging": "DoT mitigation and potion boost.",
+    "Fishing": "Steady materials for meals.",
+    "Hunting": "Boss damage and execute bonus.",
+    "Blacksmithing": "Improves crafted gear output.",
+    "Alchemy": "Stronger, longer debuffs and potions.",
+    "Cooking": "More meal slots and duration.",
+    "Enchanting": "Unlocks gem types and effects.",
+    "Dragon Handling": "Dragon bonuses scale better."
+  };
+  return { icon: iconMap[skill] || "•", short: short[skill] || "Improves progression.", full: `${short[skill] || "Improves progression."} Breakpoints: ${GameData.lifeSkillBreakpoints.join("/")}` };
+}
 
-  ui.epicActions.innerHTML = GameData.epicActions
-    .map((action) => {
-      const ready = cooldownRemaining(`epic-${action.id}`) <= 0;
-      const disabled = !ready;
-      return `<div class="epic-item">
-        <strong>${action.name}</strong>
-        <div>${ready ? "Ready" : "Cooling down"}</div>
-        <button class="secondary" data-epic="${action.id}" ${disabled ? "disabled" : ""}>Go</button>
-      </div>`;
-    })
-    .join("");
+function renderLifeSkillSection(title, skills) {
+  const rows = skills.map((skill) => {
+    const data = state.lifeSkills[skill];
+    const meta = lifeSkillMeta(skill);
+    const pct = Math.max(0, Math.min(100, (data.xp / data.xpToNext) * 100));
+    const cdr = Math.max(0, Math.ceil((data.cooldownUntil - Date.now()) / 1000));
+    const ready = cdr <= 0;
+    const actionLabel = ["Blacksmithing", "Alchemy", "Cooking", "Enchanting"].includes(skill) ? "Craft" : "Practice";
+    return `<div class="life-row">
+      <div class="life-row-main">
+        <div class="life-row-head">
+          <div class="life-skill-title tooltip" data-tip="${meta.full}">${meta.icon} ${skill}</div>
+          <span class="life-badge">Lv ${data.level}</span>
+        </div>
+        <div class="progress-mini" aria-label="${skill} progress"><div class="fill" style="width:${pct}%"></div></div>
+        <div class="life-passive-line tooltip" data-tip="${meta.full}">${meta.short}</div>
+      </div>
+      <div>
+        <button class="secondary" data-life="${skill}" ${ready ? "" : `disabled title="Cooldown ${cdr}s"`}>${ready ? actionLabel : `${cdr}s`}</button>
+      </div>
+    </div>`;
+  }).join("");
+  return `<div class="life-section"><h4>${title}</h4>${rows}</div>`;
+}
+
+function renderLifeSkills() {
+  const gathering = ["Mining", "Foraging", "Fishing", "Hunting"];
+  const crafting = ["Blacksmithing", "Alchemy", "Cooking", "Enchanting"];
+  const meta = ["Dragon Handling"];
+  ui.lifeSkills.innerHTML = [
+    renderLifeSkillSection("Gathering", gathering),
+    renderLifeSkillSection("Crafting", crafting),
+    renderLifeSkillSection("Meta", meta)
+  ].join("");
+  if (ui.epicActions) ui.epicActions.innerHTML = "";
 }
 
 function renderDragons() {
@@ -1620,6 +1677,12 @@ function renderSettings() {
   ui.lootFilterMode.value = state.player.settings.lootFilterMode;
   ui.toggleMobileLayout.checked = state.player.settings.mobileLayout;
   ui.toggleCompactNav.checked = state.player.settings.compactNav;
+  ui.toggleCompactUi.checked = state.player.settings.compactUi;
+  ui.toggleAdvancedTooltips.checked = state.player.settings.advancedTooltips;
+  ui.toggleReducedMotion.checked = state.player.settings.reducedMotion;
+  ui.toggleAudioMuted.checked = state.player.settings.audioMuted;
+  ui.combatLogVerbosity.value = state.player.settings.combatLogVerbosity;
+  switchSettingsTab(document.querySelector("[data-settings-panel]:not([hidden])")?.dataset.settingsPanel || "gameplay");
 }
 
 function renderFusionFilters() {
@@ -2869,6 +2932,20 @@ function switchTab(tab) {
   if (window.innerWidth <= 900 || state.player.settings.mobileLayout) closeDrawer();
 }
 
+function switchSettingsTab(tabName) {
+  document.querySelectorAll("[data-settings-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.settingsPanel !== tabName;
+  });
+  if (ui.settingsTabs) ui.settingsTabs.querySelectorAll("button[data-settings-tab]").forEach((btn) => btn.classList.toggle("active", btn.dataset.settingsTab === tabName));
+}
+
+function resetSettingsToDefaults() {
+  if (!confirm("Reset settings to defaults?")) return;
+  state.player.settings = { ...defaultSettings() };
+  logMessage("Settings reset to defaults.", "system", null);
+  updateAll();
+}
+
 function handleSettingsChange() {
   state.player.settings.uiScale = ui.uiScale.value;
   state.player.settings.customScale = Number(ui.customScale.value);
@@ -2879,6 +2956,11 @@ function handleSettingsChange() {
   state.player.settings.lootFilterMode = ui.lootFilterMode.value;
   state.player.settings.mobileLayout = ui.toggleMobileLayout.checked;
   state.player.settings.compactNav = ui.toggleCompactNav.checked;
+  state.player.settings.compactUi = ui.toggleCompactUi.checked;
+  state.player.settings.advancedTooltips = ui.toggleAdvancedTooltips.checked;
+  state.player.settings.reducedMotion = ui.toggleReducedMotion.checked;
+  state.player.settings.audioMuted = ui.toggleAudioMuted.checked;
+  state.player.settings.combatLogVerbosity = ui.combatLogVerbosity.value;
   updateAll();
 }
 
@@ -3276,6 +3358,17 @@ function setupEventListeners() {
   ui.lootFilterMode.addEventListener("change", handleSettingsChange);
   ui.toggleMobileLayout.addEventListener("change", handleSettingsChange);
   ui.toggleCompactNav.addEventListener("change", handleSettingsChange);
+  ui.toggleCompactUi.addEventListener("change", handleSettingsChange);
+  ui.toggleAdvancedTooltips.addEventListener("change", handleSettingsChange);
+  ui.toggleReducedMotion.addEventListener("change", handleSettingsChange);
+  ui.toggleAudioMuted.addEventListener("change", handleSettingsChange);
+  ui.combatLogVerbosity.addEventListener("change", handleSettingsChange);
+  if (ui.settingsTabs) ui.settingsTabs.addEventListener("click", (event) => {
+    const btn = event.target.closest("button[data-settings-tab]");
+    if (!btn) return;
+    switchSettingsTab(btn.dataset.settingsTab);
+  });
+  if (ui.resetSettings) ui.resetSettings.addEventListener("click", resetSettingsToDefaults);
   ui.navOverlay.addEventListener("click", closeDrawer);
   ui.fusionSlot.addEventListener("change", renderFusionSelection);
   ui.fusionTier.addEventListener("change", renderFusionSelection);

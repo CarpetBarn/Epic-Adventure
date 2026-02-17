@@ -170,10 +170,7 @@
               <h3>Life Skills</h3>
               <div id="lifeSkills"></div>
             </div>
-            <div>
-              <h3>EPIC Actions</h3>
-              <div id="epicActions"></div>
-            </div>
+
           </div>
         </div>
       </section>
@@ -195,7 +192,33 @@
       <section class="panel" id="panel-settings" role="tabpanel">
         <div class="card">
           <h2>Settings</h2>
-          <div class="settings-grid">
+          <div class="settings-tabs" id="settingsTabs">
+            <button class="secondary active" data-settings-tab="gameplay">Gameplay</button>
+            <button class="secondary" data-settings-tab="ui">UI</button>
+            <button class="secondary" data-settings-tab="audio">Audio</button>
+            <button class="secondary" data-settings-tab="accessibility">Accessibility</button>
+            <button class="secondary" data-settings-tab="advanced">Advanced</button>
+          </div>
+
+          <div class="settings-grid" data-settings-panel="gameplay">
+            <label>Loot Filter Mode
+              <select id="lootFilterMode">
+                <option value="normal">Normal</option>
+                <option value="strict">Strict</option>
+              </select>
+            </label>
+            <label>Combat Log Verbosity
+              <select id="combatLogVerbosity">
+                <option value="concise">Concise</option>
+                <option value="verbose">Verbose</option>
+              </select>
+            </label>
+            <label>New Game Class
+              <select id="newGameClass"></select>
+            </label>
+          </div>
+
+          <div class="settings-grid" data-settings-panel="ui" hidden>
             <label>UI Scale
               <select id="uiScale">
                 <option value="small">Small</option>
@@ -208,19 +231,24 @@
               <input id="customScale" type="range" min="60" max="160" step="1" value="100" />
               <span id="customScaleValue">100%</span>
             </label>
-            <label><input type="checkbox" id="toggleAnimations" /> Animations</label>
-            <label><input type="checkbox" id="toggleColorblind" /> Colorblind Labels</label>
-            <label>Loot Filter Mode
-              <select id="lootFilterMode">
-                <option value="normal">Normal</option>
-                <option value="strict">Strict</option>
-              </select>
-            </label>
-            <label><input type="checkbox" id="toggleMobileLayout" /> Force Mobile Layout</label>
             <label><input type="checkbox" id="toggleCompactNav" /> Compact Navigation</label>
-            <label>New Game Class
-              <select id="newGameClass"></select>
-            </label>
+            <label><input type="checkbox" id="toggleCompactUi" /> Compact UI Mode</label>
+            <label><input type="checkbox" id="toggleMobileLayout" /> Force Mobile Layout</label>
+          </div>
+
+          <div class="settings-grid" data-settings-panel="audio" hidden>
+            <label><input type="checkbox" id="toggleAudioMuted" /> Mute Audio</label>
+          </div>
+
+          <div class="settings-grid" data-settings-panel="accessibility" hidden>
+            <label><input type="checkbox" id="toggleColorblind" /> Colorblind Labels</label>
+            <label><input type="checkbox" id="toggleReducedMotion" /> Reduced Motion</label>
+            <label><input type="checkbox" id="toggleAdvancedTooltips" /> Advanced Tooltips</label>
+          </div>
+
+          <div class="settings-grid" data-settings-panel="advanced" hidden>
+            <label><input type="checkbox" id="toggleAnimations" /> Animations</label>
+            <button id="resetSettings" class="secondary" type="button">Reset to Defaults</button>
           </div>
           <div class="settings-save-tools">
             <button id="exportSave" class="secondary">Export Save</button>
