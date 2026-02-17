@@ -300,7 +300,7 @@ Object.values(GameData.skillNodes).forEach((node) => {
   node.value = isKeystone ? 0.06 : (isMid ? 0.04 : 0.03);
 });
 
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 const SAVE_KEYS = {
   meta: "epicAdventureSaveMeta",
   player: "epicAdventureSavePlayer",
@@ -346,6 +346,15 @@ const defaultState = (selectedClass = "Warrior") => {
       statuses: [],
       cooldowns: {},
       preparedBuffs: [],
+      activeGearLoadoutId: "farm",
+      gearLoadouts: {
+        version: 1,
+        slots: [
+          { id: "farm", name: "Farm", equipmentSnapshot: { weapon: null, armor: null, helmet: null, boots: null, accessory: null } },
+          { id: "boss", name: "Boss", equipmentSnapshot: { weapon: null, armor: null, helmet: null, boots: null, accessory: null } },
+          { id: "dungeon", name: "Dungeon", equipmentSnapshot: { weapon: null, armor: null, helmet: null, boots: null, accessory: null } }
+        ]
+      },
       settings: {
         uiScale: "medium",
         customScale: 100,
@@ -405,6 +414,7 @@ const ui = {
   inventoryFilter: document.getElementById("inventoryFilter"),
   inventorySort: document.getElementById("inventorySort"),
   sellAll: document.getElementById("sellAll"),
+  gearLoadouts: document.getElementById("gearLoadouts"),
   skillLoadout: document.getElementById("skillLoadout"),
   skillTree: document.getElementById("skillTree"),
   lifeSkills: document.getElementById("lifeSkills"),
@@ -705,6 +715,19 @@ function migrateSaveBundle(bundle) {
     migrated.player.preparedBuffs = Array.isArray(migrated.player.preparedBuffs) ? migrated.player.preparedBuffs : [];
     migrated.meta.version = 3;
   }
+  if (migrated.meta.version < 4) {
+    migrated.player = migrated.player || {};
+    migrated.player.activeGearLoadoutId = migrated.player.activeGearLoadoutId || "farm";
+    migrated.player.gearLoadouts = migrated.player.gearLoadouts || {
+      version: 1,
+      slots: [
+        { id: "farm", name: "Farm", equipmentSnapshot: { weapon: null, armor: null, helmet: null, boots: null, accessory: null } },
+        { id: "boss", name: "Boss", equipmentSnapshot: { weapon: null, armor: null, helmet: null, boots: null, accessory: null } },
+        { id: "dungeon", name: "Dungeon", equipmentSnapshot: { weapon: null, armor: null, helmet: null, boots: null, accessory: null } }
+      ]
+    };
+    migrated.meta.version = 4;
+  }
   return migrated;
 }
 
@@ -820,6 +843,28 @@ function ensureStateIntegrity() {
     rarity: gem.rarity || "Uncommon"
   }));
   state.player.preparedBuffs = Array.isArray(state.player.preparedBuffs) ? state.player.preparedBuffs : [];
+  const defaultSlots = [
+    { id: "farm", name: "Farm", equipmentSnapshot: { weapon: null, armor: null, helmet: null, boots: null, accessory: null } },
+    { id: "boss", name: "Boss", equipmentSnapshot: { weapon: null, armor: null, helmet: null, boots: null, accessory: null } },
+    { id: "dungeon", name: "Dungeon", equipmentSnapshot: { weapon: null, armor: null, helmet: null, boots: null, accessory: null } }
+  ];
+  state.player.gearLoadouts = state.player.gearLoadouts || { version: 1, slots: defaultSlots };
+  state.player.gearLoadouts.version = 1;
+  state.player.gearLoadouts.slots = (state.player.gearLoadouts.slots || defaultSlots).map((slot, idx) => ({
+    id: slot.id || defaultSlots[idx]?.id || `slot-${idx+1}`,
+    name: slot.name || defaultSlots[idx]?.name || `Slot ${idx+1}`,
+    equipmentSnapshot: {
+      weapon: slot.equipmentSnapshot?.weapon || null,
+      armor: slot.equipmentSnapshot?.armor || null,
+      helmet: slot.equipmentSnapshot?.helmet || null,
+      boots: slot.equipmentSnapshot?.boots || null,
+      accessory: slot.equipmentSnapshot?.accessory || null
+    }
+  })).slice(0,3);
+  while (state.player.gearLoadouts.slots.length < 3) state.player.gearLoadouts.slots.push(defaultSlots[state.player.gearLoadouts.slots.length]);
+  if (!state.player.gearLoadouts.slots.some((slot) => slot.id === state.player.activeGearLoadoutId)) {
+    state.player.activeGearLoadoutId = state.player.gearLoadouts.slots[0].id;
+  }
 
   const defaults = getDefaultSkillLoadouts();
   state.selectedSkills = state.selectedSkills || {};
@@ -983,6 +1028,85 @@ function refreshStats() {
   state.player.resource = Math.min(state.player.resource, state.player.resourceMax);
 }
 
+function cloneEquipmentSnapshot(equipment) {
+  return {
+    weapon: equipment.weapon ? { ...equipment.weapon, gems: (equipment.weapon.gems || []).map((g) => ({ ...g })) } : null,
+    armor: equipment.armor ? { ...equipment.armor, gems: (equipment.armor.gems || []).map((g) => ({ ...g })) } : null,
+    helmet: equipment.helmet ? { ...equipment.helmet, gems: (equipment.helmet.gems || []).map((g) => ({ ...g })) } : null,
+    boots: equipment.boots ? { ...equipment.boots, gems: (equipment.boots.gems || []).map((g) => ({ ...g })) } : null,
+    accessory: equipment.accessory ? { ...equipment.accessory, gems: (equipment.accessory.gems || []).map((g) => ({ ...g })) } : null
+  };
+}
+
+function loadoutById(id) {
+  return (state.player.gearLoadouts?.slots || []).find((slot) => slot.id === id);
+}
+
+function loadoutGearScore(snapshot) {
+  return Object.values(snapshot || {}).filter(Boolean).reduce((sum, item) => sum + gearScore(item), 0);
+}
+
+function saveCurrentToLoadout(id) {
+  const slot = loadoutById(id);
+  if (!slot) return;
+  slot.equipmentSnapshot = cloneEquipmentSnapshot(state.equipment);
+  logMessage(`Saved current equipment to ${slot.name}.`);
+  showToast(`Saved ${slot.name}`);
+  updateAll();
+}
+
+function equipLoadout(id) {
+  if (state.player.inCombat) {
+    logMessage("Cannot switch loadouts during combat.");
+    return;
+  }
+  const slot = loadoutById(id);
+  if (!slot) return;
+  state.equipment = cloneEquipmentSnapshot(slot.equipmentSnapshot || {});
+  state.player.activeGearLoadoutId = slot.id;
+  logMessage(`Equipped loadout: ${slot.name}.`);
+  showToast(`Equipped ${slot.name}`);
+  updateAll();
+}
+
+function renameLoadout(id) {
+  const slot = loadoutById(id);
+  if (!slot) return;
+  const next = prompt("Rename loadout:", slot.name);
+  if (!next) return;
+  slot.name = next.trim().slice(0, 24) || slot.name;
+  updateAll();
+}
+
+function clearLoadout(id) {
+  const slot = loadoutById(id);
+  if (!slot) return;
+  slot.equipmentSnapshot = { weapon: null, armor: null, helmet: null, boots: null, accessory: null };
+  logMessage(`Cleared loadout: ${slot.name}.`);
+  updateAll();
+}
+
+function renderGearLoadoutsPanel() {
+  if (!ui.gearLoadouts) return;
+  const slots = state.player.gearLoadouts?.slots || [];
+  ui.gearLoadouts.innerHTML = slots.map((slot) => {
+    const score = loadoutGearScore(slot.equipmentSnapshot);
+    const active = slot.id === state.player.activeGearLoadoutId;
+    return `<div class="inventory-item ${active ? "active" : ""}">
+      <div class="meta">
+        <strong>${slot.name}${active ? " • Active" : ""}</strong>
+        <span class="tooltip">GearScore ${score}</span>
+      </div>
+      <div>
+        <button class="secondary" data-loadout-save="${slot.id}">Save Current</button>
+        <button class="secondary" data-loadout-equip="${slot.id}">Equip</button>
+        <button class="secondary" data-loadout-rename="${slot.id}">Rename</button>
+        <button class="secondary" data-loadout-clear="${slot.id}">Clear</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
 function renderCombat() {
   refreshStats();
   const player = state.player;
@@ -993,8 +1117,10 @@ function renderCombat() {
       return `<div>${slot}: ${item.name} (${gearScore(item)}) <button class="secondary" data-unequip="${slot}">Unequip</button></div>`;
     })
     .join("");
+  const loadoutChips = (state.player.gearLoadouts?.slots || []).map((slot) => `<button class="secondary" data-loadout-equip="${slot.id}" ${slot.id===state.player.activeGearLoadoutId ? "disabled" : ""}>${slot.name}</button>`).join("");
   ui.playerPanel.innerHTML = `
     <div><strong>Player</strong></div>
+    <div class="tooltip">Loadouts: ${loadoutChips} <button class="secondary" data-tab="inventory">Manage</button></div>
     <div>HP: ${formatNumber(player.currentHP)}/${formatNumber(player.maxHP)}</div>
     <div>${playerResourceLabel()}: ${formatNumber(player.resource)}/${formatNumber(player.resourceMax)}</div>
     <div>ATK ${formatNumber(baseStats().atk)} | DEF ${formatNumber(baseStats().def)}</div>
@@ -1125,6 +1251,7 @@ function renderZones() {
 }
 
 function renderInventory() {
+  renderGearLoadoutsPanel();
   const filter = ui.inventoryFilter.value || "all";
   const items = getInventoryItems(filter);
   ui.inventoryList.innerHTML = items
@@ -2801,6 +2928,26 @@ function setupEventListeners() {
     const zoneCard = event.target.closest(".zone-card");
     if (zoneCard && !zoneCard.classList.contains("locked")) {
       setZone(Number(zoneCard.dataset.zone));
+      return;
+    }
+    const loadoutSaveBtn = event.target.closest("button[data-loadout-save]");
+    if (loadoutSaveBtn) {
+      saveCurrentToLoadout(loadoutSaveBtn.dataset.loadoutSave);
+      return;
+    }
+    const loadoutEquipBtn = event.target.closest("button[data-loadout-equip]");
+    if (loadoutEquipBtn) {
+      equipLoadout(loadoutEquipBtn.dataset.loadoutEquip);
+      return;
+    }
+    const loadoutRenameBtn = event.target.closest("button[data-loadout-rename]");
+    if (loadoutRenameBtn) {
+      renameLoadout(loadoutRenameBtn.dataset.loadoutRename);
+      return;
+    }
+    const loadoutClearBtn = event.target.closest("button[data-loadout-clear]");
+    if (loadoutClearBtn) {
+      clearLoadout(loadoutClearBtn.dataset.loadoutClear);
       return;
     }
     const equipButton = event.target.closest("button[data-equip]");
