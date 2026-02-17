@@ -300,7 +300,7 @@ Object.values(GameData.skillNodes).forEach((node) => {
   node.value = isKeystone ? 0.06 : (isMid ? 0.04 : 0.03);
 });
 
-const SAVE_VERSION = 4;
+const SAVE_VERSION = 5;
 const SAVE_KEYS = {
   meta: "epicAdventureSaveMeta",
   player: "epicAdventureSavePlayer",
@@ -728,6 +728,24 @@ function migrateSaveBundle(bundle) {
     };
     migrated.meta.version = 4;
   }
+  if (migrated.meta.version < 5) {
+    migrated.player = migrated.player || {};
+    const slots = migrated.player.gearLoadouts?.slots || [];
+    migrated.player.gearLoadouts = {
+      version: 1,
+      slots: slots.map((slot) => ({
+        ...slot,
+        equipmentSnapshot: {
+          weapon: slot?.equipmentSnapshot?.weapon || null,
+          armor: slot?.equipmentSnapshot?.armor || null,
+          helmet: slot?.equipmentSnapshot?.helmet || null,
+          boots: slot?.equipmentSnapshot?.boots || null,
+          accessory: slot?.equipmentSnapshot?.accessory || null
+        }
+      }))
+    };
+    migrated.meta.version = 5;
+  }
   return migrated;
 }
 
@@ -843,6 +861,21 @@ function ensureStateIntegrity() {
     rarity: gem.rarity || "Uncommon"
   }));
   state.player.preparedBuffs = Array.isArray(state.player.preparedBuffs) ? state.player.preparedBuffs : [];
+  const normalizeGearLike = (gear) => {
+    if (!gear) return null;
+    return {
+      ...gear,
+      gems: (Array.isArray(gear.gems) ? gear.gems : []).map((gem) => ({
+        ...gem,
+        type: gem.type || "Basic",
+        rarity: gem.rarity || "Uncommon"
+      })),
+      locked: Boolean(gear.locked),
+      gearScore: typeof gear.gearScore === "number"
+        ? gear.gearScore
+        : Math.round(((gear.stats?.atk || 0) * 1.4) + ((gear.stats?.def || 0) * 1.2) + ((gear.stats?.hp || 0) * 0.18) + ((gear.stats?.crit || 0) * 8))
+    };
+  };
   const defaultSlots = [
     { id: "farm", name: "Farm", equipmentSnapshot: { weapon: null, armor: null, helmet: null, boots: null, accessory: null } },
     { id: "boss", name: "Boss", equipmentSnapshot: { weapon: null, armor: null, helmet: null, boots: null, accessory: null } },
@@ -854,11 +887,11 @@ function ensureStateIntegrity() {
     id: slot.id || defaultSlots[idx]?.id || `slot-${idx+1}`,
     name: slot.name || defaultSlots[idx]?.name || `Slot ${idx+1}`,
     equipmentSnapshot: {
-      weapon: slot.equipmentSnapshot?.weapon || null,
-      armor: slot.equipmentSnapshot?.armor || null,
-      helmet: slot.equipmentSnapshot?.helmet || null,
-      boots: slot.equipmentSnapshot?.boots || null,
-      accessory: slot.equipmentSnapshot?.accessory || null
+      weapon: normalizeGearLike(slot.equipmentSnapshot?.weapon),
+      armor: normalizeGearLike(slot.equipmentSnapshot?.armor),
+      helmet: normalizeGearLike(slot.equipmentSnapshot?.helmet),
+      boots: normalizeGearLike(slot.equipmentSnapshot?.boots),
+      accessory: normalizeGearLike(slot.equipmentSnapshot?.accessory)
     }
   })).slice(0,3);
   while (state.player.gearLoadouts.slots.length < 3) state.player.gearLoadouts.slots.push(defaultSlots[state.player.gearLoadouts.slots.length]);
@@ -1064,6 +1097,8 @@ function equipLoadout(id) {
   if (!slot) return;
   state.equipment = cloneEquipmentSnapshot(slot.equipmentSnapshot || {});
   state.player.activeGearLoadoutId = slot.id;
+  statsCache = { signature: "", value: null };
+  refreshStats();
   logMessage(`Equipped loadout: ${slot.name}.`);
   showToast(`Equipped ${slot.name}`);
   updateAll();
@@ -1322,10 +1357,10 @@ function equippedGearScoreTotal() {
 
 function compareVsEquipped(item) {
   const equipped = state.equipment[item.slot];
-  if (!equipped) return { delta: gearScore(item), badge: "▲" };
-  const delta = gearScore(item) - gearScore(equipped);
-  const badge = delta > 0 ? "▲" : delta < 0 ? "▼" : "＝";
-  return { delta, badge };
+  const deltaRaw = gearScore(item) - (equipped ? gearScore(equipped) : 0);
+  const deltaDisplay = Math.round(deltaRaw * 10) / 10;
+  const badge = deltaDisplay > 0 ? "▲" : deltaDisplay < 0 ? "▼" : "＝";
+  return { delta: deltaDisplay, badge };
 }
 
 function renderSkillTree() {
@@ -1683,7 +1718,8 @@ function addStatus(target, status) {
     potency: status.potency ?? 0,
     tickTiming: status.tickTiming || "start",
     type: status.type || "dot",
-    target: status.target || "self"
+    target: status.target || "self",
+    skipNextTick: Boolean(status.skipNextTick)
   };
   if (target === state.player && ["dmg-in", "def-down", "dot"].includes(payload.type)) {
     payload.duration = Math.max(1, Math.round(payload.duration * (1 - gemTypeEffects().debuffDurationReduction)));
@@ -1703,6 +1739,10 @@ function tickStatuses(target, timing = "start") {
   const notes = [];
   target.statuses = target.statuses.filter((status) => {
     if (status.tickTiming === timing) {
+      if (status.skipNextTick) {
+        status.skipNextTick = false;
+        return true;
+      }
       const stacks = Math.max(1, status.stacks || 1);
       if (status.type === "dot") {
         const rawDot = Math.max(1, Math.round((status.potency || 1) * stacks));
@@ -1810,23 +1850,26 @@ function checkBossPhaseChange() {
   const enemy = state.enemy;
   if (!enemy || !(enemy.traits || []).includes("Boss")) return false;
   const hpRatio = enemy.hp / enemy.maxHP;
-  const nextPhase = hpRatio <= enemy.phaseThresholds[1] ? 3 : hpRatio <= enemy.phaseThresholds[0] ? 2 : 1;
-  if (nextPhase <= enemy.phase) return false;
-  enemy.phase = nextPhase;
-  const profile = enemy.phaseProfiles[nextPhase - 1] || "boss";
-  enemy.resistances = { ...(GameData.resistanceProfiles[profile] || {}) };
-  enemy.statuses = (enemy.statuses || []).filter((status) => status.id !== "boss-phase-passive");
-  addStatus(enemy, {
-    id: "boss-phase-passive",
-    source: `phase-${nextPhase}`,
-    duration: 999,
-    stacks: 1,
-    potency: enemy.phasePassivePotency[nextPhase - 1] || 0,
-    tickTiming: "start",
-    type: "phase-pulse",
-    target: "player"
-  });
-  logMessage(`${enemy.name} shifts to Phase ${nextPhase}!`);
+  const targetPhase = hpRatio <= enemy.phaseThresholds[1] ? 3 : hpRatio <= enemy.phaseThresholds[0] ? 2 : 1;
+  if (targetPhase <= enemy.phase) return false;
+  while (enemy.phase < targetPhase) {
+    enemy.phase += 1;
+    const profile = enemy.phaseProfiles[enemy.phase - 1] || "boss";
+    enemy.resistances = { ...(GameData.resistanceProfiles[profile] || {}) };
+    enemy.statuses = (enemy.statuses || []).filter((status) => status.id !== "boss-phase-passive");
+    addStatus(enemy, {
+      id: "boss-phase-passive",
+      source: `phase-${enemy.phase}`,
+      duration: 999,
+      stacks: 1,
+      potency: enemy.phasePassivePotency[enemy.phase - 1] || 0,
+      tickTiming: "start",
+      type: "phase-pulse",
+      target: "player",
+      skipNextTick: true
+    });
+    logMessage(`${enemy.name} shifts to Phase ${enemy.phase}!`);
+  }
   return true;
 }
 
@@ -2283,9 +2326,11 @@ function pickAutoSkill(enemy) {
     let score = mod.multiplier;
     if (miningHigh && (enemy.traits || []).includes("Armored") && tags.some((tag) => ["physical", "melee"].includes(tag))) score += 0.2;
     if (alchemyHigh && (enemy.traits || []).includes("Boss") && skill.effect?.secondary?.type === "debuff") score += 0.25;
+    if (mod.multiplier < 0.75) score -= 0.25;
     return { skillName, score };
   }).sort((a, b) => b.score - a.score);
-  return options[0]?.skillName || null;
+  if (!options[0] || options[0].score < 0.8) return null;
+  return options[0].skillName;
 }
 
 function handleAutoBattle() {
@@ -2305,6 +2350,10 @@ function handleAutoBattle() {
     const template = i === fights - 1 ? GameData.enemyTemplates.boss : GameData.enemyTemplates.hunt;
     const enemy = {
       ...template,
+      phase: 1,
+      maxHP: template.hp,
+      hp: template.hp,
+      phaseThresholds: [0.7, 0.35],
       traits: template.traits || [],
       resistances: { ...(GameData.resistanceProfiles[template.profile] || {}) }
     };
@@ -2316,7 +2365,14 @@ function handleAutoBattle() {
     } else {
       const bestSkill = pickAutoSkill(enemy);
       hpLost += bestSkill ? Math.max(4, currentZone().level - 2) : (6 + currentZone().level);
-      if ((enemy.traits || []).includes("Boss") && Math.random() < 0.5) phasePauses += 1;
+      if ((enemy.traits || []).includes("Boss")) {
+        enemy.hp = Math.max(0, enemy.hp - Math.round(enemy.maxHP * 0.4));
+        const nextPhase = enemy.hp / enemy.maxHP <= enemy.phaseThresholds[1] ? 3 : enemy.hp / enemy.maxHP <= enemy.phaseThresholds[0] ? 2 : 1;
+        if (nextPhase > enemy.phase) {
+          enemy.phase = nextPhase;
+          phasePauses += 1;
+        }
+      }
     }
 
     wins += 1;
@@ -2803,9 +2859,26 @@ function importSave() {
   }
   try {
     const parsed = JSON.parse(raw);
-    const merged = buildStateFromBundle(parsed);
+    const bundle = parsed.meta ? parsed : {
+      meta: { version: 1 },
+      player: parsed.player || {},
+      inventory: parsed.inventory || {},
+      equipment: parsed.equipment || {},
+      lifeSkills: parsed.lifeSkills || {},
+      misc: {
+        enemy: parsed.enemy,
+        epicCooldowns: parsed.epicCooldowns,
+        log: parsed.log,
+        battleSummary: parsed.battleSummary,
+        selectedFusion: parsed.selectedFusion,
+        selectedBreeding: parsed.selectedBreeding,
+        eggBattleCount: parsed.eggBattleCount
+      }
+    };
+    const merged = buildStateFromBundle(bundle);
     createBackupSnapshot();
     state = merged;
+    ensureStateIntegrity();
     lastSavedSnapshot = {};
     saveState();
     logMessage("Save imported successfully.");
@@ -2858,7 +2931,7 @@ function updateOrientation() {
 
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").then((registration) => {
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((registration) => {
       registration.update();
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;

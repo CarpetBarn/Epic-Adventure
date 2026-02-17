@@ -1,4 +1,4 @@
-const CACHE_NAME = "epic-adventure-cache-v3";
+const CACHE_NAME = "epic-adventure-cache-v4";
 const CORE_ASSETS = ["/", "/index.html", "/styles.css", "/game.js", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
@@ -22,30 +22,20 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
-  const requestUrl = new URL(event.request.url);
-  const isHtmlRequest = event.request.mode === "navigate" || requestUrl.pathname.endsWith(".html") || requestUrl.pathname === "/";
-
-  if (isHtmlRequest) {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          return response;
-        })
-        .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/index.html")))
-    );
-    return;
-  }
-
   event.respondWith(
-    caches.match(event.request).then((cached) =>
-      cached ||
-      fetch(event.request).then((response) => {
+    fetch(event.request)
+      .then((response) => {
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
         return response;
       })
-    )
+      .catch(() =>
+        caches.match(event.request).then((cached) => {
+          if (cached) return cached;
+          const requestUrl = new URL(event.request.url);
+          const isHtmlRequest = event.request.mode === "navigate" || requestUrl.pathname.endsWith(".html") || requestUrl.pathname === "/";
+          return isHtmlRequest ? caches.match("/index.html") : undefined;
+        })
+      )
   );
 });
