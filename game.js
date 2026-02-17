@@ -492,7 +492,7 @@ function totalGemAtkFromSockets(level) {
   );
 }
 
-function getLifeSkillLevel(name) {
+ function getLifeSkillLevel(name) {
   return state.lifeSkills?.[name]?.level || 1;
 }
 
