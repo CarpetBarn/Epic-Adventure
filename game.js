@@ -173,6 +173,11 @@ const GameData = {
     4: { atk: 2.5 },
     5: { atk: 3.0 }
   },
+  gemTypes: [
+    "Slayer", "Penetrator", "Executioner",
+    "Bastion", "Lifebloom", "Wardstone",
+    "Flow", "Precision", "Momentum"
+  ],
   zones: [
     { id: 1, name: "Greenwild", level: 1, gateBoss: "Thorn Guardian" },
     { id: 2, name: "Amber Dunes", level: 20, gateBoss: "Dune Reaver" },
@@ -471,10 +476,12 @@ function gemConstraintsForLevel(level) {
   return { maxSockets: 5, maxTier: 5, atkBudget: Infinity };
 }
 
-function gemAtkValue(tier, level) {
+function gemAtkValue(tier, level, rarity = "Uncommon") {
   const base = GameData.gemBonuses[tier]?.atk || 1;
   const scalar = 1 + Math.min(0.8, level * 0.01);
-  return Math.max(1, Math.floor(base * scalar));
+  const rarityScale = gemRarityMultiplier(rarity);
+  const legendaryFloor = rarity === "Legendary" ? 1.25 : 1;
+  return Math.max(1, Math.floor(base * scalar * rarityScale * legendaryFloor));
 }
 
 function allOwnedGear() {
@@ -487,12 +494,50 @@ function totalSocketedGems() {
 
 function totalGemAtkFromSockets(level) {
   return allOwnedGear().reduce(
-    (sum, gear) => sum + (gear.gems || []).reduce((sub, gem) => sub + gemAtkValue(gem.tier, level), 0),
+    (sum, gear) => sum + (gear.gems || []).reduce((sub, gem) => sub + gemAtkValue(gem.tier, level, gem.rarity), 0),
     0
   );
 }
 
- function getLifeSkillLevel(name) {
+function gemRarityMultiplier(rarity = "Uncommon") {
+  const map = { Common: 1.0, Uncommon: 1.1, Rare: 1.25, Epic: 1.45, Legendary: 1.9 };
+  return map[rarity] || 1.0;
+}
+
+function chooseGemType() {
+  const enchanting = state.lifeSkills?.Enchanting?.level || 1;
+  if (enchanting < 10) return "Basic";
+  return GameData.gemTypes[Math.floor(Math.random() * GameData.gemTypes.length)];
+}
+
+function gemTypeEffects() {
+  const effects = {
+    bossDmg: 0, armorIgnore: 0, executeBonus: 0,
+    damageReduction: 0, healOnKill: 0, debuffDurationReduction: 0,
+    resourceRegen: 0, critConversion: 0, firstSkillBonus: 0
+  };
+  const enchanting = state.lifeSkills?.Enchanting?.level || 1;
+  const secondaryUnlocked = enchanting >= 30;
+  Object.values(state.equipment).filter(Boolean).forEach((gear) => {
+    (gear.gems || []).forEach((gem) => {
+      const base = (gem.tier || 1) * 0.01 * gemRarityMultiplier(gem.rarity);
+      const boost = gem.rarity === "Legendary" && secondaryUnlocked ? 1.5 : 1;
+      const v = base * boost;
+      if (gem.type === "Slayer") effects.bossDmg += v * 2;
+      if (gem.type === "Penetrator") effects.armorIgnore += v * 1.8;
+      if (gem.type === "Executioner") effects.executeBonus += v * 1.6;
+      if (gem.type === "Bastion") effects.damageReduction += v * 1.6;
+      if (gem.type === "Lifebloom") effects.healOnKill += v * 2.2;
+      if (gem.type === "Wardstone") effects.debuffDurationReduction += v * 1.8;
+      if (gem.type === "Flow") effects.resourceRegen += v * 1.6;
+      if (gem.type === "Precision") effects.critConversion += v * 1.3;
+      if (gem.type === "Momentum") effects.firstSkillBonus += v * 2.2;
+    });
+  });
+  return effects;
+}
+
+function getLifeSkillLevel(name) {
   return state.lifeSkills?.[name]?.level || 1;
 }
 
@@ -744,7 +789,11 @@ function debounce(fn, wait) {
 function ensureStateIntegrity() {
   state.inventory.gear = (state.inventory.gear || []).map((gear) => ({
     ...gear,
-    gems: Array.isArray(gear.gems) ? gear.gems : [],
+    gems: (Array.isArray(gear.gems) ? gear.gems : []).map((gem) => ({
+      ...gem,
+      type: gem.type || "Basic",
+      rarity: gem.rarity || "Uncommon"
+    })),
     locked: Boolean(gear.locked),
     gearScore: typeof gear.gearScore === "number" ? gear.gearScore : Math.round(((gear.stats?.atk || 0) * 1.4) + ((gear.stats?.def || 0) * 1.2) + ((gear.stats?.hp || 0) * 0.18) + ((gear.stats?.crit || 0) * 8))
   }));
@@ -752,7 +801,11 @@ function ensureStateIntegrity() {
   Object.keys(state.equipment || {}).forEach((slot) => {
     const gear = state.equipment[slot];
     if (!gear) return;
-    gear.gems = Array.isArray(gear.gems) ? gear.gems : [];
+    gear.gems = (Array.isArray(gear.gems) ? gear.gems : []).map((gem) => ({
+      ...gem,
+      type: gem.type || "Basic",
+      rarity: gem.rarity || "Uncommon"
+    }));
     gear.gearScore = typeof gear.gearScore === "number"
       ? gear.gearScore
       : Math.round(((gear.stats?.atk || 0) * 1.4) + ((gear.stats?.def || 0) * 1.2) + ((gear.stats?.hp || 0) * 0.18) + ((gear.stats?.crit || 0) * 8));
@@ -761,6 +814,11 @@ function ensureStateIntegrity() {
   Object.values(state.lifeSkills || {}).forEach((entry) => {
     entry.level = Math.min(GameData.lifeSkillMaxLevel, Math.max(1, entry.level || 1));
   });
+  state.inventory.gems = (state.inventory.gems || []).map((gem) => ({
+    ...gem,
+    type: gem.type || "Basic",
+    rarity: gem.rarity || "Uncommon"
+  }));
   state.player.preparedBuffs = Array.isArray(state.player.preparedBuffs) ? state.player.preparedBuffs : [];
 
   const defaults = getDefaultSkillLoadouts();
@@ -856,11 +914,12 @@ function baseStats() {
   const classStats = GameData.classes[state.player.class].stats;
   const growth = levelGrowth(state.player.level);
   const passives = lifeSkillPassives();
+  const gemEffects = gemTypeEffects();
   const effectiveClassStats = {
     hp: classStats.hp + growth.hp,
     atk: classStats.atk + growth.atk,
     def: classStats.def + growth.def,
-    crit: classStats.crit + growth.crit + passives.critBonus,
+    crit: classStats.crit + growth.crit + passives.critBonus + gemEffects.critConversion * 0.05,
     spd: classStats.spd
   };
   const constraints = gemConstraintsForLevel(state.player.level);
@@ -1079,7 +1138,7 @@ function renderInventory() {
             <div class="meta">
               <strong class="rarity" style="color:${item.color}">${item.name}${item.locked ? " 🔒" : ""} <span>${compare.badge}</span></strong>
               <span class="tooltip">${item.rarity} • Tier ${item.gearTier} • iLvl ${item.itemLevel}</span>
-              <span class="tooltip">${gearStatLine(item)}${item.gems.length ? ` • Gems: ${item.gems.map((gem) => gem.name).join(", ")}` : ""}</span>
+              <span class="tooltip">${gearStatLine(item)}${item.gems.length ? ` • Gems: ${item.gems.map((gem) => `${gem.name}(${gem.type || "Basic"})`).join(", ")}` : ""}</span>
               <span class="tooltip">GearScore ${gearScore(item)} (ATK ${(item.stats.atk || 0) * 1.4} + DEF ${(item.stats.def || 0) * 1.2} + HP ${Math.round((item.stats.hp || 0) * 0.18)} + CRIT ${(item.stats.crit || 0) * 8}) • Δ ${compare.delta >= 0 ? "+" : ""}${formatNumber(compare.delta)} vs equipped</span>
             </div>
             <div>
@@ -1093,7 +1152,7 @@ function renderInventory() {
           </div>
         `;
       }
-      const detail = item.type === "gems" ? `Tier ${item.tier} • ${item.rarity}` : `${item.qty} owned`;
+      const detail = item.type === "gems" ? `Type ${item.typeLabel || item.type || "Basic"} • Tier ${item.tier} • ${item.rarity}` : `${item.qty} owned`;
       return `
         <div class="inventory-item">
           <div class="meta">
@@ -1385,7 +1444,9 @@ function getInventoryItems(filter) {
     items.push(...state.inventory.materials.map((item) => ({ ...item, type: "materials" })));
   }
   if (filter === "all" || filter === "gems") {
-    items.push(...state.inventory.gems.map((item) => ({ ...item, type: "gems" })));
+    const gemItems = state.inventory.gems.map((item) => ({ ...item, type: "gems", typeLabel: item.type || "Basic" }));
+    if ((ui.inventorySort?.value || "") === "gemtype") gemItems.sort((a, b) => (a.typeLabel || "").localeCompare(b.typeLabel || ""));
+    items.push(...gemItems);
   }
   if (filter === "all" || filter === "consumables") {
     items.push(...state.inventory.consumables.map((item) => ({ ...item, type: "consumables" })));
@@ -1410,6 +1471,7 @@ function sortGearItems(gearItems) {
     if (mode === "tier") return b.gearTier - a.gearTier;
     if (mode === "ilevel") return b.itemLevel - a.itemLevel;
     if (mode === "name") return a.name.localeCompare(b.name);
+    if (mode === "gemtype") return 0;
     return 0;
   });
   return sorted;
@@ -1467,6 +1529,7 @@ function startCombat(type, isGate = false, zoneOverride = null) {
     phaseThresholds: [0.7, 0.35],
     phaseProfiles: [template.profile || "neutral", "armored", "elemental"],
     phasePassivePotency: [0, 4, 7],
+    firstSkillUsed: false,
     resistances: { ...(GameData.resistanceProfiles[template.profile] || {}) }
   };
   state.enemy = enemy;
@@ -1495,6 +1558,9 @@ function addStatus(target, status) {
     type: status.type || "dot",
     target: status.target || "self"
   };
+  if (target === state.player && ["dmg-in", "def-down", "dot"].includes(payload.type)) {
+    payload.duration = Math.max(1, Math.round(payload.duration * (1 - gemTypeEffects().debuffDurationReduction)));
+  }
   const existing = target.statuses.find((entry) => entry.id === payload.id && entry.source === payload.source);
   if (existing) {
     existing.stacks += payload.stacks;
@@ -1583,7 +1649,7 @@ function effectiveDefense(defender, attacker) {
     : (defender === state.player ? baseStats().def : 0);
   let out = Math.max(0, baseDef * debuffMult);
   if (attacker === state.player && (defender.traits || []).includes("Armored")) {
-    out *= Math.max(0.5, 1 - lifeSkillPassives().armorPen);
+    out *= Math.max(0.35, 1 - lifeSkillPassives().armorPen - gemTypeEffects().armorIgnore);
   }
   return out;
 }
@@ -1596,12 +1662,15 @@ function resolveDamagePipeline({ attacker, defender, attackValue, tags, critChan
   const critMult = crit ? 1.5 : 1;
   let final = Math.max(1, Math.round(baseDamage * traitTag.multiplier * buffDebuffMult * critMult));
   if (attacker === state.player && (defender.traits || []).includes("Boss")) {
-    final = Math.round(final * (1 + lifeSkillPassives().bossDmg));
+    const gemEffects = gemTypeEffects();
+    final = Math.round(final * (1 + lifeSkillPassives().bossDmg + gemEffects.bossDmg));
     const threshold = lifeSkillPassives().executeThreshold;
-    if (threshold > 0 && defender.hp / defender.maxHP <= threshold) final = Math.round(final * 1.35);
+    const gemExec = gemEffects.executeBonus;
+    if (threshold > 0 && defender.hp / defender.maxHP <= threshold + gemExec * 0.25) final = Math.round(final * 1.35);
   }
   if (defender === state.player) {
-    final = Math.max(1, Math.round(final * (1 - lifeSkillPassives().damageReduction)));
+    const gemEffects = gemTypeEffects();
+    final = Math.max(1, Math.round(final * (1 - lifeSkillPassives().damageReduction - gemEffects.damageReduction)));
   }
 
   const labels = [];
@@ -1654,6 +1723,7 @@ function applyConsumableEffect(itemId) {
   const def = GameData.consumableDefs[itemId];
   if (!def) return false;
   const passives = lifeSkillPassives();
+  const gemEffects = gemTypeEffects();
   if (def.healPct) {
     const healAmount = Math.round(state.player.maxHP * def.healPct * (1 + passives.potionBoost));
     state.player.currentHP = Math.min(state.player.maxHP, state.player.currentHP + healAmount);
@@ -1746,16 +1816,18 @@ function performPlayerAction(action, skillName) {
 function applySkill(name, skill) {
   const stats = baseStats();
   const skillTags = skill.tags || ["physical"];
+  const firstSkillBonus = (!state.enemy.firstSkillUsed ? gemTypeEffects().firstSkillBonus : 0);
   const applyDamage = (scale) => resolveDamagePipeline({
     attacker: state.player,
     defender: state.enemy,
-    attackValue: Math.max(1, stats.atk * scale),
+    attackValue: Math.max(1, stats.atk * scale * (1 + firstSkillBonus)),
     tags: skillTags,
     critChance: stats.crit
   });
 
   if (skill.effect.type === "damage") {
     const resolved = applyDamage(skill.effect.scale);
+    state.enemy.firstSkillUsed = true;
     state.enemy.hp -= resolved.damage;
     if (skill.effect.secondary) applySecondary(skill.effect.secondary);
     summarizeTurn("You", name, resolved);
@@ -1766,6 +1838,7 @@ function applySkill(name, skill) {
     const labels = [];
     for (let i = 0; i < skill.effect.hits; i += 1) {
       const resolved = applyDamage(skill.effect.scale);
+      state.enemy.firstSkillUsed = true;
       total += resolved.damage;
       labels.push(...resolved.labels);
       state.enemy.hp -= resolved.damage;
@@ -1807,6 +1880,7 @@ function applySkill(name, skill) {
 function applySecondary(effect) {
   if (effect.type === "debuff") {
     const passives = lifeSkillPassives();
+  const gemEffects = gemTypeEffects();
     if (Math.random() > passives.alchemyDebuffChance) {
       logMessage("Debuff failed to apply.");
       return;
@@ -1864,7 +1938,7 @@ function enemyTurn() {
   });
   state.player.currentHP -= resolved.damage;
   summarizeTurn(state.enemy.name, "Attack", resolved);
-  const regenBoost = lifeSkillPassives().resourceRegenBonus;
+  const regenBoost = lifeSkillPassives().resourceRegenBonus + gemTypeEffects().resourceRegen;
   state.player.resource = Math.min(
     state.player.resourceMax,
     state.player.resource + Math.round(GameData.classes[state.player.class].resource.regen * (1 + regenBoost))
@@ -1887,7 +1961,9 @@ function handleVictory() {
   const loot = rollLoot(enemy.zoneId);
   gainXp(xpReward);
   state.player.gold += loot.gold;
-  state.battleSummary = `Victory! +${xpReward} XP, +${loot.gold} gold.`;
+  const lifebloomHeal = gemTypeEffects().healOnKill > 0 ? Math.round(state.player.maxHP * Math.min(0.25, gemTypeEffects().healOnKill)) : 0;
+  if (lifebloomHeal > 0) state.player.currentHP = Math.min(state.player.maxHP, state.player.currentHP + lifebloomHeal);
+  state.battleSummary = `Victory! +${xpReward} XP, +${loot.gold} gold.${lifebloomHeal > 0 ? ` Lifebloom +${lifebloomHeal} HP.` : ""}`;
   if (enemy.type === "gate") {
     state.player[`gate-${enemy.zoneId}`] = true;
     const zone = GameData.zones.find((entry) => entry.id === enemy.zoneId);
@@ -2048,10 +2124,11 @@ function addConsumable(id, name, qty) {
   else state.inventory.consumables.push({ id, name, qty });
 }
 
-function addGem({ name, tier, rarity }) {
-  const existing = state.inventory.gems.find((item) => item.name === name && item.tier === tier);
+function addGem({ name, tier, rarity, type }) {
+  const gemType = type || chooseGemType();
+  const existing = state.inventory.gems.find((item) => item.name === name && item.tier === tier && (item.type || "Basic") === gemType && item.rarity === rarity);
   if (existing) existing.qty += 1;
-  else state.inventory.gems.push({ id: crypto.randomUUID(), name, qty: 1, tier, rarity });
+  else state.inventory.gems.push({ id: crypto.randomUUID(), name, qty: 1, tier, rarity, type: gemType });
 }
 
 function addEgg(zoneId) {
@@ -2455,7 +2532,7 @@ function socketGem(gearId) {
     return;
   }
 
-  const projectedGemAtk = totalGemAtkFromSockets(state.player.level) + gemAtkValue(gem.tier, state.player.level);
+  const projectedGemAtk = totalGemAtkFromSockets(state.player.level) + gemAtkValue(gem.tier, state.player.level, gem.rarity);
   if (projectedGemAtk > constraints.atkBudget) {
     logMessage(`Gem ATK budget exceeded for your level (max ${constraints.atkBudget}).`);
     return;
@@ -2463,7 +2540,7 @@ function socketGem(gearId) {
 
   gem.qty -= 1;
   if (gem.qty <= 0) state.inventory.gems = state.inventory.gems.filter((item) => item.qty > 0);
-  gear.gems.push({ name: gem.name, tier: gem.tier, rarity: gem.rarity });
+  gear.gems.push({ name: gem.name, tier: gem.tier, rarity: gem.rarity, type: gem.type || "Basic" });
   logMessage(`Socketed ${gem.name} into ${gear.name}.`);
   showToast(`Socketed ${gem.name}`);
   updateAll();
