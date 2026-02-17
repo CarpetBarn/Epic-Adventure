@@ -408,6 +408,7 @@ const ui = {
   combatActions: document.getElementById("combatActions"),
   combatSecondary: document.getElementById("combatSecondary"),
   battleSummary: document.getElementById("battleSummary"),
+  battleResultLog: document.getElementById("battleResultLog"),
   zoneList: document.getElementById("zoneList"),
   zoneInfo: document.getElementById("zoneInfo"),
   inventoryList: document.getElementById("inventoryList"),
@@ -1142,6 +1143,29 @@ function renderGearLoadoutsPanel() {
   }).join("");
 }
 
+
+function renderBattleResultLog() {
+  if (!ui.battleResultLog) return;
+  const player = state.player;
+  const enemy = state.enemy;
+  const stats = baseStats();
+  if (!enemy) {
+    ui.battleResultLog.textContent = `Last Result: ${state.battleSummary || "None"}
+Player: ${player.name} (${player.class}) Lv ${player.level} | HP ${formatNumber(player.currentHP)}/${formatNumber(player.maxHP)} | ${playerResourceLabel()} ${formatNumber(player.resource)}/${formatNumber(player.resourceMax)}
+Stats: ATK ${formatNumber(stats.atk)} DEF ${formatNumber(stats.def)} CRIT ${formatNumber(stats.crit * 100)}% SPD ${formatNumber(stats.spd)}
+Enemy: None`;
+    return;
+  }
+
+  const enemyStatuses = (enemy.statuses || []).map((st) => `${st.id}(${st.duration})`).join(', ') || 'None';
+  ui.battleResultLog.textContent = `Last Result: ${state.battleSummary || "In Progress"}
+Player: ${player.name} (${player.class}) Lv ${player.level} | HP ${formatNumber(player.currentHP)}/${formatNumber(player.maxHP)} | ${playerResourceLabel()} ${formatNumber(player.resource)}/${formatNumber(player.resourceMax)}
+Stats: ATK ${formatNumber(stats.atk)} DEF ${formatNumber(stats.def)} CRIT ${formatNumber(stats.crit * 100)}% SPD ${formatNumber(stats.spd)}
+Enemy: ${enemy.name} | HP ${formatNumber(enemy.hp)}/${formatNumber(enemy.maxHP)} | ATK ${formatNumber(enemy.atk)} DEF ${formatNumber(enemy.def)} | Phase ${enemy.phase || 1}
+Traits: ${(enemy.traits || []).join(', ') || 'None'} | Resists: ${formatResistanceSummary(enemy.resistances)}
+Enemy Statuses: ${enemyStatuses}`;
+}
+
 function renderCombat() {
   refreshStats();
   const player = state.player;
@@ -1177,6 +1201,7 @@ function renderCombat() {
 
   renderCombatButtons();
   ui.battleSummary.textContent = state.battleSummary || "Take an action to see results.";
+  renderBattleResultLog();
 }
 
 function getActiveCombatSkills() {

@@ -624,3 +624,9 @@ body[data-theme="colorblind"] .rarity {
   font-size: 0.95rem;
   min-height: 120px;
 }
+
+.battle-detail {
+  margin-top: 8px;
+  white-space: pre-wrap;
+  line-height: 1.35;
+}
