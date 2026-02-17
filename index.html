@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#12141d" />
+  <title>Epic Adventure RPG</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-theme="dark" data-nav="expanded" data-orientation="portrait">
+  <div class="app">
+    <aside class="nav" aria-label="Main navigation">
+      <div class="nav-header">
+        <button class="icon-button" id="navToggle" aria-label="Toggle navigation">
+          ☰
+        </button>
+        <div class="brand">
+          <div class="brand-title">Epic Adventure</div>
+          <div class="brand-sub">Single-Page RPG</div>
+        </div>
+      </div>
+      <nav class="nav-tabs" role="tablist">
+        <button class="tab-button active" data-tab="combat" aria-label="Combat">
+          <span class="icon">⚔️</span><span class="label">Combat</span>
+        </button>
+        <button class="tab-button" data-tab="zones" aria-label="Zones">
+          <span class="icon">🗺️</span><span class="label">Zones</span>
+        </button>
+        <button class="tab-button" data-tab="inventory" aria-label="Inventory">
+          <span class="icon">🎒</span><span class="label">Inventory</span>
+        </button>
+        <button class="tab-button" data-tab="skills" aria-label="Skill Trees">
+          <span class="icon">🌟</span><span class="label">Skill Trees</span>
+        </button>
+        <button class="tab-button" data-tab="life" aria-label="Life Skills & Epic">
+          <span class="icon">🛠️</span><span class="label">Life Skills</span>
+        </button>
+        <button class="tab-button" data-tab="dragons" aria-label="Dragons">
+          <span class="icon">🐉</span><span class="label">Dragons</span>
+        </button>
+        <button class="tab-button" data-tab="shop" aria-label="Shop">
+          <span class="icon">🛒</span><span class="label">Shop</span>
+        </button>
+        <button class="tab-button" data-tab="settings" aria-label="Settings">
+          <span class="icon">⚙️</span><span class="label">Settings</span>
+        </button>
+      </nav>
+      <section class="log" aria-live="polite" aria-label="Battle results">
+        <div class="log-title">Battle Results</div>
+        <div id="battleSummary" class="summary"></div>
+      </section>
+    </aside>
+
+    <div class="overlay" id="navOverlay" aria-hidden="true"></div>
+
+    <main class="content">
+      <header class="topbar">
+        <div class="player-summary">
+          <div class="player-name" id="playerName">Adventurer</div>
+          <div class="player-meta" id="playerMeta"></div>
+        </div>
+        <div class="resources">
+          <div class="resource" id="hpBar"></div>
+          <div class="resource" id="resBar"></div>
+        </div>
+      </header>
+
+      <section class="panel active" id="panel-combat" role="tabpanel">
+        <div class="panel-grid">
+          <div class="card">
+            <h2>Combat</h2>
+            <div class="combat-panels">
+              <div class="combat-panel" id="playerPanel"></div>
+              <div class="combat-panel" id="enemyPanel"></div>
+            </div>
+            <div class="combat-actions" id="combatActions"></div>
+            <div class="combat-secondary" id="combatSecondary"></div>
+          </div>
+          <div class="card">
+            <h3>Game Log</h3>
+            <section class="log" aria-live="polite" aria-label="Game log">
+              <div class="log-title">Game Log</div>
+              <div id="logEntries" class="log-entries"></div>
+            </section>
+          </div>
+        </div>
+        <div class="mobile-action-bar" id="mobileActionBar"></div>
+      </section>
+
+      <section class="panel" id="panel-zones" role="tabpanel">
+        <div class="card">
+          <h2>Zones</h2>
+          <div id="zoneList" class="zone-grid"></div>
+          <div id="zoneInfo" class="zone-info"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-inventory" role="tabpanel">
+        <div class="card">
+          <h2>Inventory</h2>
+          <div class="inventory-controls">
+            <select id="inventoryFilter">
+              <option value="all">All</option>
+              <option value="gear">Gear</option>
+              <option value="materials">Materials</option>
+              <option value="gems">Gems</option>
+              <option value="consumables">Consumables</option>
+              <option value="eggs">Eggs</option>
+              <option value="dragons">Dragons</option>
+            </select>
+            <select id="inventorySort">
+              <option value="default">Sort: Default</option>
+              <option value="rarity">Sort: Rarity</option>
+              <option value="tier">Sort: Tier</option>
+              <option value="ilevel">Sort: Item Level</option>
+              <option value="name">Sort: Name</option>
+              <option value="gemtype">Sort: Gem Type</option>
+            </select>
+            <button id="sellAll" class="secondary">Sell All</button>
+          </div>
+          <div id="inventoryList" class="inventory-list"></div>
+        </div>
+        <div class="card">
+          <h3>Loadouts</h3>
+          <div id="gearLoadouts"></div>
+        </div>
+        <div class="card">
+          <h3>Fusion</h3>
+          <div class="fusion-controls">
+            <select id="fusionSlot"></select>
+            <select id="fusionTier"></select>
+            <select id="fusionRarity"></select>
+            <input id="fusionSearch" type="text" placeholder="Search" />
+          </div>
+          <div class="fusion-selection" id="fusionSelection"></div>
+          <button id="fuseButton">Fuse Selected</button>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-skills" role="tabpanel">
+        <div class="card">
+          <h2>Skill Trees</h2>
+          <div id="skillLoadout"></div>
+          <div id="skillTree"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-life" role="tabpanel">
+        <div class="card">
+          <h2>Life Skills & EPIC Systems</h2>
+          <div class="life-grid">
+            <div>
+              <h3>Life Skills</h3>
+              <div id="lifeSkills"></div>
+            </div>
+            <div>
+              <h3>EPIC Actions</h3>
+              <div id="epicActions"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-dragons" role="tabpanel">
+        <div class="card">
+          <h2>Dragons & Eggs</h2>
+          <div id="dragonList"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-shop" role="tabpanel">
+        <div class="card">
+          <h2>Shop</h2>
+          <div id="shopList"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-settings" role="tabpanel">
+        <div class="card">
+          <h2>Settings</h2>
+          <div class="settings-grid">
+            <label>UI Scale
+              <select id="uiScale">
+                <option value="small">Small</option>
+                <option value="medium">Medium</option>
+                <option value="large">Large</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <label>Custom Resize
+              <input id="customScale" type="range" min="60" max="160" step="1" value="100" />
+              <span id="customScaleValue">100%</span>
+            </label>
+            <label><input type="checkbox" id="toggleAnimations" /> Animations</label>
+            <label><input type="checkbox" id="toggleColorblind" /> Colorblind Labels</label>
+            <label>Loot Filter Mode
+              <select id="lootFilterMode">
+                <option value="normal">Normal</option>
+                <option value="strict">Strict</option>
+              </select>
+            </label>
+            <label><input type="checkbox" id="toggleMobileLayout" /> Force Mobile Layout</label>
+            <label><input type="checkbox" id="toggleCompactNav" /> Compact Navigation</label>
+            <label>New Game Class
+              <select id="newGameClass"></select>
+            </label>
+          </div>
+          <div class="settings-save-tools">
+            <button id="exportSave" class="secondary">Export Save</button>
+            <button id="importSave" class="secondary">Import Save</button>
+            <button id="restoreBackup" class="secondary">Restore Backup</button>
+            <textarea id="saveDataField" rows="4" placeholder="Paste save JSON here for import, or use copied export."></textarea>
+          </div>
+          <button id="startNewGame" class="secondary">Start New Game</button>
+          <button id="resetSave" class="danger">Reset Save</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
