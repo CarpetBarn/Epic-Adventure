@@ -258,6 +258,20 @@ const GameData = {
     "Enchanting",
     "Dragon Handling"
   ],
+  lifeSkillMaxLevel: 100,
+  lifeSkillBreakpoints: [10, 20, 30, 40, 50, 75, 100],
+  consumableDefs: {
+    potion: { id: "potion", name: "Healing Potion", type: "potion", healPct: 0.30 },
+    ironhide: { id: "ironhide", name: "Ironhide", type: "potion", status: { id: "ironhide", type: "dmg-in", potency: -0.20, duration: 3, tickTiming: "start" } },
+    weakening: { id: "weakening", name: "Weakening", type: "potion", status: { id: "weakening", type: "dmg-out", potency: -0.15, duration: 2, tickTiming: "start", target: "enemy" } },
+    purge: { id: "purge", name: "Purge", type: "potion", purge: true },
+    fracture: { id: "fracture", name: "Fracture", type: "potion", status: { id: "fracture", type: "dmg-in", potency: 0.20, duration: 2, tickTiming: "start", target: "enemy" } },
+    hunter_stew: { id: "hunter_stew", name: "Hunter’s Stew", type: "meal", meal: { stat: "crit", value: 0.15 } },
+    ironroot_soup: { id: "ironroot_soup", name: "Ironroot Soup", type: "meal", meal: { stat: "hp", value: 0.20 } },
+    mages_broth: { id: "mages_broth", name: "Mage’s Broth", type: "meal", meal: { stat: "resourceRegen", value: 0.25 } },
+    ember_feast: { id: "ember_feast", name: "Ember Feast", type: "meal", meal: { stat: "bossDmg", value: 0.20 } },
+    guardian_platter: { id: "guardian_platter", name: "Guardian Platter", type: "meal", meal: { stat: "dmgReduction", value: 0.10 } }
+  },
   epicActions: [
     { id: "hunt", name: "Hunt", type: "combat" },
     { id: "adventure", name: "Adventure", type: "combat" },
@@ -281,7 +295,7 @@ Object.values(GameData.skillNodes).forEach((node) => {
   node.value = isKeystone ? 0.06 : (isMid ? 0.04 : 0.03);
 });
 
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 const SAVE_KEYS = {
   meta: "epicAdventureSaveMeta",
   player: "epicAdventureSavePlayer",
@@ -326,6 +340,7 @@ const defaultState = (selectedClass = "Warrior") => {
       buffs: [],
       statuses: [],
       cooldowns: {},
+      preparedBuffs: [],
       settings: {
         uiScale: "medium",
         customScale: 100,
@@ -477,6 +492,59 @@ function totalGemAtkFromSockets(level) {
   );
 }
 
+ function getLifeSkillLevel(name) {
+  return state.lifeSkills?.[name]?.level || 1;
+}
+
+function activePreparedBuffs() {
+  const buffs = Array.isArray(state.player.preparedBuffs) ? state.player.preparedBuffs : [];
+  state.player.preparedBuffs = buffs.filter((buff) => buff.remainingBattles > 0);
+  return state.player.preparedBuffs;
+}
+
+function mealBuffLimit() {
+  const cooking = getLifeSkillLevel("Cooking");
+  return cooking >= 75 ? 3 : cooking >= 30 ? 2 : 1;
+}
+
+function mealDurationBattles() {
+  const cooking = getLifeSkillLevel("Cooking");
+  return 2 + Math.floor(cooking / 25);
+}
+
+function lifeSkillPassives() {
+  const mining = getLifeSkillLevel("Mining");
+  const foraging = getLifeSkillLevel("Foraging");
+  const alchemy = getLifeSkillLevel("Alchemy");
+  const cooking = getLifeSkillLevel("Cooking");
+  const hunting = getLifeSkillLevel("Hunting");
+  const mealBonuses = activePreparedBuffs().reduce((acc, buff) => {
+    if (buff.stat) acc[buff.stat] = (acc[buff.stat] || 0) + buff.value;
+    return acc;
+  }, {});
+  return {
+    armorPen: 0.08 + mining * 0.0025,
+    dotMitigation: Math.min(0.45, foraging * 0.004),
+    potionBoost: Math.min(0.5, foraging * 0.005),
+    alchemyDebuffBoost: Math.min(0.35, alchemy * 0.003),
+    alchemyDebuffChance: Math.min(0.95, 0.7 + alchemy * 0.0025),
+    ignoreBossResDebuff: alchemy >= 75,
+    mealSlots: mealBuffLimit(),
+    mealDuration: mealDurationBattles(),
+    bossDmg: 0.06 + hunting * 0.002 + (mealBonuses.bossDmg || 0),
+    executeThreshold: hunting >= 50 ? 0.12 : 0,
+    damageReduction: Math.min(0.35, hunting * 0.0015) + (mealBonuses.dmgReduction || 0),
+    critBonus: (mealBonuses.crit || 0),
+    hpBonus: (mealBonuses.hp || 0),
+    resourceRegenBonus: (mealBonuses.resourceRegen || 0)
+  };
+}
+
+function preparedBonusesSummary() {
+  const p = lifeSkillPassives();
+  return `Armor Pen ${Math.round(p.armorPen * 100)}% • DoT Mit ${Math.round(p.dotMitigation * 100)}% • Boss Dmg +${Math.round(p.bossDmg * 100)}% • DR ${Math.round(p.damageReduction * 100)}%`;
+}
+
 function logMessage(message) {
   state.log.unshift({ message, time: Date.now() });
   if (state.log.length > 30) state.log.pop();
@@ -587,6 +655,11 @@ function migrateSaveBundle(bundle) {
     };
     migrated.meta.version = 2;
   }
+  if (migrated.meta.version < 3) {
+    migrated.player = migrated.player || {};
+    migrated.player.preparedBuffs = Array.isArray(migrated.player.preparedBuffs) ? migrated.player.preparedBuffs : [];
+    migrated.meta.version = 3;
+  }
   return migrated;
 }
 
@@ -685,6 +758,11 @@ function ensureStateIntegrity() {
       : Math.round(((gear.stats?.atk || 0) * 1.4) + ((gear.stats?.def || 0) * 1.2) + ((gear.stats?.hp || 0) * 0.18) + ((gear.stats?.crit || 0) * 8));
   });
 
+  Object.values(state.lifeSkills || {}).forEach((entry) => {
+    entry.level = Math.min(GameData.lifeSkillMaxLevel, Math.max(1, entry.level || 1));
+  });
+  state.player.preparedBuffs = Array.isArray(state.player.preparedBuffs) ? state.player.preparedBuffs : [];
+
   const defaults = getDefaultSkillLoadouts();
   state.selectedSkills = state.selectedSkills || {};
   Object.keys(GameData.classes).forEach((className) => {
@@ -777,11 +855,12 @@ function baseStats() {
 
   const classStats = GameData.classes[state.player.class].stats;
   const growth = levelGrowth(state.player.level);
+  const passives = lifeSkillPassives();
   const effectiveClassStats = {
     hp: classStats.hp + growth.hp,
     atk: classStats.atk + growth.atk,
     def: classStats.def + growth.def,
-    crit: classStats.crit + growth.crit,
+    crit: classStats.crit + growth.crit + passives.critBonus,
     spd: classStats.spd
   };
   const constraints = gemConstraintsForLevel(state.player.level);
@@ -820,7 +899,7 @@ function baseStats() {
     },
     {}
   );
-  const maxHP = Math.round(effectiveClassStats.hp * (1 + (bonus.hp || 0) + (dragonBonus.hp || 0)) + (equipmentBonus.hp || 0));
+  const maxHP = Math.round(effectiveClassStats.hp * (1 + (bonus.hp || 0) + (dragonBonus.hp || 0) + passives.hpBonus) + (equipmentBonus.hp || 0));
   const atk = Math.round(effectiveClassStats.atk * (1 + (bonus.atk || 0) + (dragonBonus.atk || 0)) + (equipmentBonus.atk || 0));
   const def = Math.round(effectiveClassStats.def * (1 + (bonus.def || 0) + (dragonBonus.def || 0)) + (equipmentBonus.def || 0));
   const crit = effectiveClassStats.crit + (bonus.crit || 0) + ((equipmentBonus.crit || 0) / 100);
@@ -1022,6 +1101,7 @@ function renderInventory() {
             <span class="tooltip">${detail}</span>
           </div>
           <div>
+            ${item.type === "consumables" ? `<button class="secondary" data-use-consumable="${item.id}">Use</button>` : ""}
             ${item.type === "eggs" ? `<button class="secondary" data-hatch="${item.id}">${item.ready ? "Hatch Egg" : "Not Ready"}</button>` : ""}
             ${item.type === "dragons" ? `<button class="secondary" data-release="${item.id}">Release</button>` : ""}
           </div>
@@ -1144,7 +1224,8 @@ function renderLifeSkills() {
       return ready
         ? `<div class="life-item">
             <strong>${skill}</strong>
-            <div>Lv ${data.level} • XP ${formatNumber(data.xp)}/${formatNumber(data.xpToNext)}</div>
+            <div>Lv ${data.level}/100 • XP ${formatNumber(data.xp)}/${formatNumber(data.xpToNext)}</div>
+            <div class="tooltip">Breakpoints: ${GameData.lifeSkillBreakpoints.join("/")}</div>
             <button class="secondary" data-life="${skill}">Practice</button>
           </div>`
         : "";
@@ -1390,6 +1471,10 @@ function startCombat(type, isGate = false, zoneOverride = null) {
   };
   state.enemy = enemy;
   state.player.inCombat = true;
+  if (["boss", "dungeon"].includes(type)) {
+    logMessage(`Prepared Bonuses: ${preparedBonusesSummary()}`);
+    state.player.preparedBuffs = activePreparedBuffs().map((buff) => ({ ...buff, remainingBattles: Math.max(0, buff.remainingBattles - 1) }));
+  }
   logMessage(`${enemy.name} appears!`);
   updateAll();
 }
@@ -1427,9 +1512,11 @@ function tickStatuses(target, timing = "start") {
     if (status.tickTiming === timing) {
       const stacks = Math.max(1, status.stacks || 1);
       if (status.type === "dot") {
-        const dot = Math.max(1, Math.round((status.potency || 1) * stacks));
-        target.hp = Math.max(0, target.hp - dot);
-        notes.push(`${status.id} -${formatNumber(dot)}`);
+        const rawDot = Math.max(1, Math.round((status.potency || 1) * stacks));
+        const mitigated = target === state.player ? Math.max(1, Math.round(rawDot * (1 - lifeSkillPassives().dotMitigation))) : rawDot;
+        if (target === state.player) target.currentHP = Math.max(0, target.currentHP - mitigated);
+        else target.hp = Math.max(0, target.hp - mitigated);
+        notes.push(`${status.id} -${formatNumber(mitigated)}`);
       }
       if (status.type === "hot") {
         const hot = Math.max(1, Math.round((status.potency || 1) * stacks));
@@ -1486,7 +1573,7 @@ function statMultiplierFromStatuses(attacker, defender) {
   return out * incoming;
 }
 
-function effectiveDefense(defender) {
+function effectiveDefense(defender, attacker) {
   const debuffMult = (defender.statuses || []).reduce((acc, status) => {
     if (status.type === "def-down") return acc * (1 - status.potency * status.stacks);
     return acc;
@@ -1494,16 +1581,29 @@ function effectiveDefense(defender) {
   const baseDef = typeof defender.def === "number"
     ? defender.def
     : (defender === state.player ? baseStats().def : 0);
-  return Math.max(0, baseDef * debuffMult);
+  let out = Math.max(0, baseDef * debuffMult);
+  if (attacker === state.player && (defender.traits || []).includes("Armored")) {
+    out *= Math.max(0.5, 1 - lifeSkillPassives().armorPen);
+  }
+  return out;
 }
 
 function resolveDamagePipeline({ attacker, defender, attackValue, tags, critChance }) {
-  const baseDamage = Math.max(1, attackValue - effectiveDefense(defender) * 0.5);
+  const baseDamage = Math.max(1, attackValue - effectiveDefense(defender, attacker) * 0.5);
   const traitTag = resolveTagTraitModifiers(defender, tags);
   const buffDebuffMult = statMultiplierFromStatuses(attacker, defender);
   const crit = Math.random() < critChance;
   const critMult = crit ? 1.5 : 1;
-  const final = Math.max(1, Math.round(baseDamage * traitTag.multiplier * buffDebuffMult * critMult));
+  let final = Math.max(1, Math.round(baseDamage * traitTag.multiplier * buffDebuffMult * critMult));
+  if (attacker === state.player && (defender.traits || []).includes("Boss")) {
+    final = Math.round(final * (1 + lifeSkillPassives().bossDmg));
+    const threshold = lifeSkillPassives().executeThreshold;
+    if (threshold > 0 && defender.hp / defender.maxHP <= threshold) final = Math.round(final * 1.35);
+  }
+  if (defender === state.player) {
+    final = Math.max(1, Math.round(final * (1 - lifeSkillPassives().damageReduction)));
+  }
+
   const labels = [];
   if (crit) labels.push("CRIT");
   labels.push(...traitTag.notes);
@@ -1542,6 +1642,49 @@ function summarizeTurn(actor, actionLabel, result) {
   logMessage(line);
 }
 
+function consumeItem(itemId) {
+  const item = state.inventory.consumables.find((entry) => entry.id === itemId && entry.qty > 0);
+  if (!item) return false;
+  item.qty -= 1;
+  if (item.qty <= 0) state.inventory.consumables = state.inventory.consumables.filter((entry) => entry.qty > 0);
+  return true;
+}
+
+function applyConsumableEffect(itemId) {
+  const def = GameData.consumableDefs[itemId];
+  if (!def) return false;
+  const passives = lifeSkillPassives();
+  if (def.healPct) {
+    const healAmount = Math.round(state.player.maxHP * def.healPct * (1 + passives.potionBoost));
+    state.player.currentHP = Math.min(state.player.maxHP, state.player.currentHP + healAmount);
+    state.battleSummary = `${def.name}: +${formatNumber(healAmount)} HP`;
+    logMessage(state.battleSummary);
+    return true;
+  }
+  if (def.purge) {
+    state.player.statuses = (state.player.statuses || []).filter((status) => !["dmg-in", "def-down", "dot"].includes(status.type));
+    logMessage("Purge removed all debuffs.");
+    return true;
+  }
+  if (def.status) {
+    const statusDef = { ...def.status, source: def.name, duration: def.status.duration + Math.floor(getLifeSkillLevel("Alchemy") / 25) };
+    if (statusDef.target === "enemy") addStatus(state.enemy, statusDef);
+    else addStatus(state.player, statusDef);
+    logMessage(`${def.name} applied.`);
+    return true;
+  }
+  if (def.meal) {
+    const buffs = activePreparedBuffs();
+    const limit = mealBuffLimit();
+    if (buffs.length >= limit) buffs.shift();
+    buffs.push({ id: def.id, stat: def.meal.stat, value: def.meal.value, remainingBattles: mealDurationBattles() });
+    state.player.preparedBuffs = buffs;
+    logMessage(`${def.name} prepared (${mealDurationBattles()} battles).`);
+    return true;
+  }
+  return false;
+}
+
 function performPlayerAction(action, skillName) {
   if (!state.enemy) {
     logMessage("No enemy to act on.");
@@ -1570,15 +1713,11 @@ function performPlayerAction(action, skillName) {
   }
   if (action === "heal") {
     const potion = state.inventory.consumables.find((item) => item.id === "potion" && item.qty > 0);
-    if (!potion) {
+    if (!potion || !consumeItem("potion")) {
       logMessage("No healing items available.");
       return;
     }
-    potion.qty -= 1;
-    const healAmount = Math.round(state.player.maxHP * 0.3);
-    state.player.currentHP = Math.min(state.player.maxHP, state.player.currentHP + healAmount);
-    state.battleSummary = `You heal for ${formatNumber(healAmount)} HP.`;
-    logMessage(state.battleSummary);
+    applyConsumableEffect("potion");
   }
   if (action === "skill" && skillName) {
     const skill = GameData.skills[skillName];
@@ -1667,13 +1806,19 @@ function applySkill(name, skill) {
 
 function applySecondary(effect) {
   if (effect.type === "debuff") {
+    const passives = lifeSkillPassives();
+    if (Math.random() > passives.alchemyDebuffChance) {
+      logMessage("Debuff failed to apply.");
+      return;
+    }
     addStatus(state.enemy, {
       id: `${effect.stat}-down`,
       source: "skill-secondary",
-      duration: effect.duration || 2,
+      duration: (effect.duration || 2) + Math.floor(getLifeSkillLevel("Alchemy") / 25),
       stacks: 1,
-      potency: Math.abs(effect.value || 0.1),
+      potency: Math.abs(effect.value || 0.1) * (1 + passives.alchemyDebuffBoost),
       tickTiming: "start",
+      ignoreBossRes: passives.ignoreBossResDebuff,
       type: effect.stat === "def" ? "def-down" : "dmg-in"
     });
   }
@@ -1719,9 +1864,10 @@ function enemyTurn() {
   });
   state.player.currentHP -= resolved.damage;
   summarizeTurn(state.enemy.name, "Attack", resolved);
+  const regenBoost = lifeSkillPassives().resourceRegenBonus;
   state.player.resource = Math.min(
     state.player.resourceMax,
-    state.player.resource + GameData.classes[state.player.class].resource.regen
+    state.player.resource + Math.round(GameData.classes[state.player.class].resource.regen * (1 + regenBoost))
   );
   if (state.player.currentHP <= 0) {
     handleDeath();
@@ -1924,11 +2070,16 @@ function addEgg(zoneId) {
 
 function pickAutoSkill(enemy) {
   const skills = getActiveCombatSkills();
+  const miningHigh = getLifeSkillLevel("Mining") >= 40;
+  const alchemyHigh = getLifeSkillLevel("Alchemy") >= 50;
   const options = skills.map((skillName) => {
     const skill = GameData.skills[skillName];
     const tags = skill.tags || ["physical"];
     const mod = resolveTagTraitModifiers(enemy, tags);
-    return { skillName, score: mod.multiplier };
+    let score = mod.multiplier;
+    if (miningHigh && (enemy.traits || []).includes("Armored") && tags.some((tag) => ["physical", "melee"].includes(tag))) score += 0.2;
+    if (alchemyHigh && (enemy.traits || []).includes("Boss") && skill.effect?.secondary?.type === "debuff") score += 0.25;
+    return { skillName, score };
   }).sort((a, b) => b.score - a.score);
   return options[0]?.skillName || null;
 }
@@ -1954,8 +2105,9 @@ function handleAutoBattle() {
       resistances: { ...(GameData.resistanceProfiles[template.profile] || {}) }
     };
 
-    if (state.player.currentHP < state.player.maxHP * 0.35) {
-      const recovered = Math.round(state.player.maxHP * 0.12);
+    const underDot = (state.player.statuses || []).some((status) => status.type === "dot");
+    if (state.player.currentHP < state.player.maxHP * 0.35 || (getLifeSkillLevel("Foraging") >= 40 && underDot)) {
+      const recovered = Math.round(state.player.maxHP * 0.12 * (1 + lifeSkillPassives().potionBoost));
       state.player.currentHP = Math.min(state.player.maxHP, state.player.currentHP + recovered);
     } else {
       const bestSkill = pickAutoSkill(enemy);
@@ -1987,14 +2139,29 @@ function cooldownRemaining(key) {
 function handleLifeSkill(skill) {
   const data = state.lifeSkills[skill];
   data.xp += 15;
-  if (data.xp >= data.xpToNext) {
+  if (data.level < GameData.lifeSkillMaxLevel && data.xp >= data.xpToNext) {
     data.xp -= data.xpToNext;
-    data.level += 1;
+    data.level = Math.min(GameData.lifeSkillMaxLevel, data.level + 1);
     data.xpToNext = Math.round(data.xpToNext * 1.2);
+    if (GameData.lifeSkillBreakpoints.includes(data.level)) logMessage(`${skill} reached breakpoint ${data.level}!`);
   }
   data.cooldownUntil = Date.now() + 45000;
   const material = GameData.materials.find((mat) => mat.type.toLowerCase() === skill.toLowerCase());
   if (material) addMaterial(material);
+
+  if (skill === "Alchemy") {
+    const table = ["potion", "ironhide", "weakening", "purge", "fracture"];
+    const unlocked = table.slice(0, Math.min(table.length, 1 + Math.floor(data.level / 20)));
+    const id = unlocked[Math.floor(Math.random() * unlocked.length)];
+    addConsumable(id, GameData.consumableDefs[id].name, 1);
+  }
+  if (skill === "Cooking") {
+    const meals = ["hunter_stew", "ironroot_soup", "mages_broth", "ember_feast", "guardian_platter"];
+    const unlocked = meals.slice(0, Math.min(meals.length, 1 + Math.floor(data.level / 20)));
+    const id = unlocked[Math.floor(Math.random() * unlocked.length)];
+    addConsumable(id, GameData.consumableDefs[id].name, 1);
+  }
+
   logMessage(`${skill} practiced.`);
   updateAll();
 }
@@ -2602,6 +2769,15 @@ function setupEventListeners() {
     const epicButton = event.target.closest("button[data-epic]");
     if (epicButton) {
       handleEpicAction(epicButton.dataset.epic);
+      return;
+    }
+    const useConsumableButton = event.target.closest("button[data-use-consumable]");
+    if (useConsumableButton) {
+      const id = useConsumableButton.dataset.useConsumable;
+      if (consumeItem(id)) {
+        applyConsumableEffect(id);
+        updateAll();
+      }
       return;
     }
     const hatchButton = event.target.closest("button[data-hatch]");
