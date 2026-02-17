@@ -388,6 +388,9 @@ const defaultState = (selectedClass = "Warrior") => {
     epicCooldowns: {},
     log: [],
     battleSummary: "",
+    combatTurn: 0,
+    logFilter: "all",
+    logAutoScrollPaused: false,
     selectedSkills: getDefaultSkillLoadouts(),
     selectedFusion: [],
     selectedBreeding: [],
@@ -409,6 +412,10 @@ const ui = {
   combatSecondary: document.getElementById("combatSecondary"),
   battleSummary: document.getElementById("battleSummary"),
   battleResultLog: document.getElementById("battleResultLog"),
+  logFilters: document.getElementById("logFilters"),
+  resumeLog: document.getElementById("resumeLog"),
+  equippedSummary: document.getElementById("equippedSummary"),
+  inventoryActions: document.getElementById("inventoryActions"),
   zoneList: document.getElementById("zoneList"),
   zoneInfo: document.getElementById("zoneInfo"),
   inventoryList: document.getElementById("inventoryList"),
@@ -601,16 +608,33 @@ function preparedBonusesSummary() {
   return `Armor Pen ${Math.round(p.armorPen * 100)}% • DoT Mit ${Math.round(p.dotMitigation * 100)}% • Boss Dmg +${Math.round(p.bossDmg * 100)}% • DR ${Math.round(p.damageReduction * 100)}%`;
 }
 
-function logMessage(message) {
-  state.log.unshift({ message, time: Date.now() });
-  if (state.log.length > 30) state.log.pop();
+function currentLogGroup() {
+  if (!state.player.inCombat) return null;
+  return `P${state.enemy?.phase || 1} • T${state.combatTurn || 1}`;
+}
+
+function logMessage(message, category = "system", group = null) {
+  state.log.unshift({ message, time: Date.now(), category, group: group ?? currentLogGroup() });
+  if (state.log.length > 60) state.log.pop();
   renderLog();
 }
 
 function renderLog() {
-  ui.logEntries.innerHTML = state.log
-    .map((entry) => `<div>${entry.message}</div>`)
-    .join("");
+  const filter = state.logFilter || "all";
+  const entries = state.log.filter((entry) => filter === "all" || (entry.category || "system") === filter);
+  const html = [];
+  let lastGroup = null;
+  entries.forEach((entry) => {
+    if (entry.group && entry.group !== lastGroup) {
+      html.push(`<div class="log-group-title">${entry.group}</div>`);
+      lastGroup = entry.group;
+    }
+    const cat = entry.category || "system";
+    html.push(`<div class="log-entry" data-cat="${cat}">${entry.message}</div>`);
+  });
+  ui.logEntries.innerHTML = html.join("");
+  if (!state.logAutoScrollPaused) ui.logEntries.scrollTop = 0;
+  if (ui.resumeLog) ui.resumeLog.hidden = !state.logAutoScrollPaused;
 }
 
 function ensureToastStack() {
@@ -862,6 +886,9 @@ function ensureStateIntegrity() {
     rarity: gem.rarity || "Uncommon"
   }));
   state.player.preparedBuffs = Array.isArray(state.player.preparedBuffs) ? state.player.preparedBuffs : [];
+  state.combatTurn = Number.isFinite(state.combatTurn) ? state.combatTurn : 0;
+  state.logFilter = state.logFilter || "all";
+  state.logAutoScrollPaused = Boolean(state.logAutoScrollPaused);
   const normalizeGearLike = (gear) => {
     if (!gear) return null;
     return {
@@ -1177,28 +1204,42 @@ function renderCombat() {
     })
     .join("");
   const loadoutChips = (state.player.gearLoadouts?.slots || []).map((slot) => `<button class="secondary" data-loadout-equip="${slot.id}" ${slot.id===state.player.activeGearLoadoutId ? "disabled" : ""}>${slot.name}</button>`).join("");
+  const pStatuses = (player.statuses || []).map((st) => `<span class="status-pill">${st.id} (${st.duration})</span>`).join("") || '<span class="status-pill">No Status</span>';
   ui.playerPanel.innerHTML = `
     <div><strong>Player</strong></div>
-    <div class="tooltip">Loadouts: ${loadoutChips} <button class="secondary" data-tab="inventory">Manage</button></div>
-    <div>HP: ${formatNumber(player.currentHP)}/${formatNumber(player.maxHP)}</div>
-    <div>${playerResourceLabel()}: ${formatNumber(player.resource)}/${formatNumber(player.resourceMax)}</div>
-    <div>ATK ${formatNumber(baseStats().atk)} | DEF ${formatNumber(baseStats().def)}</div>
-    <div>CRIT ${formatNumber(baseStats().crit * 100)}% | SPD ${formatNumber(baseStats().spd)}</div>
-    <div class="tooltip">Gear Score Cap: ${Number.isFinite(gearScoreCap()) ? gearScoreCap() : "∞"} | Equipped: ${formatNumber(equippedGearScoreTotal())}</div>
-    <div>${equippedRows}</div>
+    <div class="bars">
+      <div class="resource hp"><div class="fill" style="width:${Math.max(0, player.currentHP / player.maxHP) * 100}%"></div><span>${formatNumber(player.currentHP)}/${formatNumber(player.maxHP)} HP</span></div>
+      <div class="resource res"><div class="fill" style="width:${Math.max(0, player.resource / player.resourceMax) * 100}%"></div><span>${playerResourceLabel()} ${formatNumber(player.resource)}/${formatNumber(player.resourceMax)}</span></div>
+    </div>
+    <div>ATK ${formatNumber(baseStats().atk)} | DEF ${formatNumber(baseStats().def)} | CRIT ${formatNumber(baseStats().crit * 100)}% | SPD ${formatNumber(baseStats().spd)}</div>
+    <div class="status-row">${pStatuses}</div>
+    <details><summary>Details</summary>
+      <div class="tooltip">Loadouts: ${loadoutChips} <button class="secondary" data-tab="inventory">Manage</button></div>
+      <div class="tooltip">Gear Score Cap: ${Number.isFinite(gearScoreCap()) ? gearScoreCap() : "∞"} | Equipped: ${formatNumber(equippedGearScoreTotal())}</div>
+      <div>${equippedRows}</div>
+    </details>
   `;
   if (state.enemy) {
     const hpPercent = Math.max(0, state.enemy.hp / state.enemy.maxHP) * 100;
+    const eStatuses = (state.enemy.statuses || []).map((st) => `<span class="status-pill">${st.id} (${st.duration})</span>`).join("") || '<span class="status-pill">No Status</span>';
     ui.enemyPanel.innerHTML = `
       <div><strong>${state.enemy.name}</strong></div>
-      <div class="resource hp"><div class="fill" style="width:${hpPercent}%"></div><span>${formatNumber(state.enemy.hp)}/${formatNumber(state.enemy.maxHP)} HP</span></div>
-      <div class="tooltip">Traits: ${(state.enemy.traits || []).join(", ") || "None"}</div>
-      <div class="tooltip">Resists: ${formatResistanceSummary(state.enemy.resistances)}</div>
+      <div class="bars"><div class="resource hp"><div class="fill" style="width:${hpPercent}%"></div><span>${formatNumber(state.enemy.hp)}/${formatNumber(state.enemy.maxHP)} HP</span></div></div>
+      <div>ATK ${formatNumber(state.enemy.atk)} | DEF ${formatNumber(state.enemy.def)} | Phase ${state.enemy.phase || 1}</div>
+      <div class="status-row">${eStatuses}</div>
+      <details><summary>Details</summary>
+        <div class="tooltip">Traits: ${(state.enemy.traits || []).join(", ") || "None"}</div>
+        <div class="tooltip">Resists: ${formatResistanceSummary(state.enemy.resistances)}</div>
+      </details>
     `;
   } else {
-    ui.enemyPanel.innerHTML = "<div>No active enemy.</div>";
+    ui.enemyPanel.innerHTML = `<div class="idle-cta">No active enemy. Start an encounter to enter combat.</div>`;
   }
 
+  const panelsWrap = document.querySelector(".combat-panels");
+  if (panelsWrap) panelsWrap.classList.add("vs-row");
+  const card = ui.playerPanel.closest(".card");
+  if (card) card.classList.add("combat-frame");
   renderCombatButtons();
   ui.battleSummary.textContent = state.battleSummary || "Take an action to see results.";
   renderBattleResultLog();
@@ -1271,14 +1312,17 @@ function renderCombatButtons() {
   const exitButton = state.player.inDungeonRun ? `<button class="action danger" data-action="exit-dungeon">Exit Dungeon</button>` : "";
 
   const grouped = [
-    { name: "Core", items: actionButtons },
-    { name: "Combat", items: [...loopButtons, dungeonButton, gateButton, exitButton].filter(Boolean) },
+    { name: "Primary", items: actionButtons },
+    { name: "Encounter", items: [...loopButtons, dungeonButton, gateButton, exitButton].filter(Boolean) },
     { name: "Skills", items: skillButtons }
   ];
 
+  const oocPotion = outOfCombatPotionState();
+  const idleHealBtn = `<button class="action" data-action="heal-oot" ${oocPotion.disabled ? "disabled" : ""} title="${oocPotion.reason}">Use Potion</button>`;
+  if (!state.player.inCombat) grouped[0].items.push(idleHealBtn);
   const groupHtml = grouped
     .filter((group) => group.items.length)
-    .map((group) => `<details class="action-group" open><summary>${group.name}</summary><div class="action-group-body">${group.items.join("")}</div></details>`)
+    .map((group) => `<details class="action-group" ${window.innerWidth <= 900 && group.name !== "Primary" ? "" : "open"}><summary>${group.name}</summary><div class="action-group-body">${group.items.join("")}</div></details>`)
     .join("");
 
   ui.combatActions.innerHTML = groupHtml;
@@ -1312,6 +1356,15 @@ function renderZones() {
 
 function renderInventory() {
   renderGearLoadoutsPanel();
+  const equippedRows = ["weapon", "armor", "helmet", "boots", "accessory"].map((slot) => {
+    const item = state.equipment[slot];
+    return `<div class="inventory-item"><div class="meta"><strong>${slot}</strong><span class="tooltip">${item ? `${item.name} • GearScore ${gearScore(item)}` : "Empty"}</span></div></div>`;
+  }).join("");
+  if (ui.equippedSummary) ui.equippedSummary.innerHTML = equippedRows;
+  const healState = outOfCombatPotionState();
+  if (ui.inventoryActions) {
+    ui.inventoryActions.innerHTML = `<div class="inventory-item"><div class="meta"><strong>Consumables</strong><span class="tooltip">Use healing potion outside combat.</span></div><div class="inventory-actions"><button class="secondary" data-action="heal-oot" ${healState.disabled ? "disabled" : ""} title="${healState.reason}">Use Potion</button></div></div>`;
+  }
   const filter = ui.inventoryFilter.value || "all";
   const items = getInventoryItems(filter);
   ui.inventoryList.innerHTML = items
@@ -1721,6 +1774,7 @@ function startCombat(type, isGate = false, zoneOverride = null) {
   };
   state.enemy = enemy;
   state.player.inCombat = true;
+  state.combatTurn = 1;
   if (["boss", "dungeon"].includes(type)) {
     logMessage(`Prepared Bonuses: ${preparedBonusesSummary()}`);
     state.player.preparedBuffs = activePreparedBuffs().map((buff) => ({ ...buff, remainingBattles: Math.max(0, buff.remainingBattles - 1) }));
@@ -1903,7 +1957,26 @@ function summarizeTurn(actor, actionLabel, result) {
   const suffix = tags ? ` [${tags}]` : "";
   const line = `${actor}: ${actionLabel} ${formatNumber(result.damage)} dmg${suffix}`;
   state.battleSummary = line;
-  logMessage(line);
+  logMessage(line, "combat");
+}
+
+function outOfCombatPotionState() {
+  const potion = state.inventory.consumables.find((item) => item.id === "potion" && item.qty > 0);
+  if (state.player.inCombat) return { disabled: true, hidden: false, reason: "Unavailable in combat." };
+  if (!potion) return { disabled: true, hidden: false, reason: "No healing potions available." };
+  if (state.player.currentHP >= state.player.maxHP) return { disabled: true, hidden: false, reason: "HP is already full." };
+  return { disabled: false, hidden: false, reason: "Use potion outside combat." };
+}
+
+function usePotionOutOfCombat() {
+  if (state.player.inCombat) return;
+  const st = outOfCombatPotionState();
+  if (st.disabled) return;
+  if (!consumeItem("potion")) return;
+  applyConsumableEffect("potion");
+  logMessage("Used Healing Potion outside combat.", "system", null);
+  showToast("Potion used");
+  updateAll();
 }
 
 function consumeItem(itemId) {
@@ -2046,7 +2119,7 @@ function applySkill(name, skill) {
     const healAmount = Math.round(state.player.maxHP * skill.effect.scale);
     state.player.currentHP = Math.min(state.player.maxHP, state.player.currentHP + healAmount);
     const line = `${name}: +${formatNumber(healAmount)} HP`;
-    logMessage(line);
+    logMessage(line, "combat");
     return line;
   }
   if (skill.effect.type === "buff") {
@@ -2060,13 +2133,13 @@ function applySkill(name, skill) {
       type: skill.effect.stat === "def" ? "dmg-in" : "dmg-out"
     });
     const line = `${name}: Buff applied`;
-    logMessage(line);
+    logMessage(line, "combat");
     return line;
   }
   if (skill.effect.type === "resource") {
     state.player.resource = Math.min(state.player.resourceMax, state.player.resource + skill.effect.amount);
     const line = `${name}: Resource restored`;
-    logMessage(line);
+    logMessage(line, "combat");
     return line;
   }
   return `${name} used.`;
@@ -2141,6 +2214,7 @@ function enemyTurn() {
   if (state.player.currentHP <= 0) {
     handleDeath();
   }
+  state.combatTurn += 1;
   updateAll();
 }
 
@@ -2162,7 +2236,7 @@ function handleVictory() {
   if (enemy.type === "gate") {
     state.player[`gate-${enemy.zoneId}`] = true;
     const zone = GameData.zones.find((entry) => entry.id === enemy.zoneId);
-    logMessage(`Gate Boss defeated in ${zone.name}!`);
+    logMessage(`Gate Boss defeated in ${zone.name}!`, "rewards");
   }
   advanceEggProgress();
   if (state.player.inDungeonRun) {
@@ -2170,7 +2244,7 @@ function handleVictory() {
     if (state.player.dungeonProgress >= 5) {
       state.player.inDungeonRun = false;
       state.player.dungeonProgress = 0;
-      logMessage("Dungeon cleared!");
+      logMessage("Dungeon cleared!", "rewards");
     } else {
       startCombat("dungeon");
       return;
@@ -2411,7 +2485,7 @@ function handleAutoBattle() {
   gainXp(GameData.xp.rewards.auto);
   state.player.cooldowns.auto = Date.now() + 15000;
   state.battleSummary = `Auto Battle: ${fights} fights, ${wins} wins, +${gold} gold, HP lost ${hpLost}, phase pauses ${phasePauses}. Loot: ${lootList.join(", ") || "None"}.`;
-  logMessage("Auto battle completed.");
+  logMessage("Auto battle completed.", "combat");
   updateAll();
 }
 
@@ -3016,6 +3090,7 @@ function setupEventListeners() {
       if (action === "dungeon") handleDungeonStart();
       if (action === "gate") handleGateBoss();
       if (action === "exit-dungeon") exitDungeon();
+      if (action === "heal-oot") usePotionOutOfCombat();
       return;
     }
     const skillButton = event.target.closest("button[data-skill]");
@@ -3164,6 +3239,29 @@ function setupEventListeners() {
   ui.navToggle.addEventListener("click", handleNavToggle);
   ui.inventoryFilter.addEventListener("change", renderInventory);
   ui.inventorySort.addEventListener("change", renderInventory);
+
+  if (ui.logEntries) {
+    ui.logEntries.addEventListener("scroll", () => {
+      state.logAutoScrollPaused = ui.logEntries.scrollTop > 8;
+      if (ui.resumeLog) ui.resumeLog.hidden = !state.logAutoScrollPaused;
+    });
+  }
+  if (ui.logFilters) {
+    ui.logFilters.addEventListener("click", (event) => {
+      const btn = event.target.closest("button[data-log-filter]");
+      if (!btn) return;
+      state.logFilter = btn.dataset.logFilter;
+      ui.logFilters.querySelectorAll("button[data-log-filter]").forEach((node) => node.classList.toggle("active", node === btn));
+      renderLog();
+    });
+  }
+  if (ui.resumeLog) {
+    ui.resumeLog.addEventListener("click", () => {
+      state.logAutoScrollPaused = false;
+      ui.resumeLog.hidden = true;
+      renderLog();
+    });
+  }
   ui.sellAll.addEventListener("click", sellAllFiltered);
   ui.startNewGame.addEventListener("click", startNewGame);
   ui.exportSave.addEventListener("click", exportSave);

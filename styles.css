@@ -630,3 +630,117 @@ body[data-theme="colorblind"] .rarity {
   white-space: pre-wrap;
   line-height: 1.35;
 }
+
+
+.combat-frame {
+  max-width: 980px;
+  margin: 0 auto 10px;
+}
+
+.vs-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.vs-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.combat-panel .bars {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.status-pill {
+  font-size: 0.78rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+}
+
+.idle-cta {
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 8px 10px;
+  background: var(--panel-light);
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.log-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.log-filters .secondary.active {
+  outline: 1px solid var(--accent);
+}
+
+.log-group-title {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.log-entry {
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+}
+
+.log-entry[data-cat="combat"] { border-left: 3px solid #6ea8ff; }
+.log-entry[data-cat="rewards"] { border-left: 3px solid #7de38d; }
+.log-entry[data-cat="status"] { border-left: 3px solid #f1c36f; }
+.log-entry[data-cat="system"] { border-left: 3px solid #b8b8b8; }
+
+.tooltip[data-tip] {
+  position: relative;
+  cursor: help;
+}
+
+.tooltip[data-tip]:hover::after,
+.tooltip[data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  top: calc(100% + 4px);
+  background: #0f1118;
+  color: #e9edf7;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  padding: 6px 8px;
+  min-width: 160px;
+  max-width: 260px;
+}
+
+.inventory-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .vs-row {
+    grid-template-columns: 1fr;
+  }
+  .vs-center {
+    min-height: 24px;
+  }
+}
