@@ -796,3 +796,16 @@ body[data-tooltips="basic"] .tooltip[data-tip]:focus-visible::after { content: n
   #panel-combat { padding-bottom: calc(170px + env(safe-area-inset-bottom)); }
   .life-row { grid-template-columns: 1fr; }
 }
+
+
+/* Batch 3 */
+.log { max-height: 360px; }
+.log-entries { max-height: 240px; min-height: 180px; overflow-y: auto; }
+@media (max-width: 900px) {
+  .log { max-height: 240px; }
+  .log-entries { max-height: 160px; min-height: 120px; }
+}
+.keystone-node {
+  border: 1px solid rgba(255, 215, 102, 0.55);
+  box-shadow: 0 0 0 1px rgba(255,215,102,0.2) inset;
+}

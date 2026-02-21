@@ -300,6 +300,73 @@ Object.values(GameData.skillNodes).forEach((node) => {
   node.value = isKeystone ? 0.06 : (isMid ? 0.04 : 0.03);
 });
 
+
+const Batch3Data = {
+  difficulty: {
+    Normal: { enemy: 1.0, rewards: 1.0 },
+    Veteran: { enemy: 1.15, rewards: 1.12 },
+    Mythic: { enemy: 1.3, rewards: 1.24 }
+  },
+  eliteAffixes: {
+    Enraged: { hp: 1.0, atk: 1.12, def: 1.0, rewards: 1.08, note: "Enraged +ATK" },
+    Shielded: { hp: 1.08, atk: 1.0, def: 1.14, rewards: 1.08, note: "Shielded +DEF" },
+    Corrupted: { hp: 1.05, atk: 1.08, def: 1.05, rewards: 1.1, note: "Corrupted +All" },
+    Swift: { hp: 0.98, atk: 1.06, def: 1.02, rewards: 1.06, note: "Swift +Tempo" }
+  },
+  dungeonMods: [
+    { id: "ferocity", name: "Ferocity", playerDmgTaken: 1.08 },
+    { id: "drain", name: "Mana Drain", resourceRegenMult: 0.85 },
+    { id: "fury", name: "Battle Fury", playerDmgDealt: 1.1 },
+    { id: "warded", name: "Warded", enemyDefMult: 1.08 }
+  ],
+  gearSets: {
+    Vanguard: { 2: { def: 0.03 }, 3: { hp: 0.04 }, 4: { cdr: 0.03 } },
+    Striker: { 2: { atk: 0.03 }, 3: { crit: 0.01 }, 4: { cdr: 0.03 } },
+    Mystic: { 2: { resource: 0.05 }, 3: { atk: 0.02 }, 4: { cdr: 0.04 } }
+  },
+  classMastery: {
+    25: { atk: 0.015 },
+    50: { def: 0.02 },
+    75: { cdr: 0.03 }
+  },
+  nodeSynergies: [
+    { id: "war-path", requires: ["Brutal Force", "Iron Wall"], bonus: { atk: 0.015, def: 0.015 } },
+    { id: "shadow-dance", requires: ["Shadow Strike", "Light Foot"], bonus: { atk: 0.02 } },
+    { id: "arcane-aegis", requires: ["Spell Power", "Arcane Shield"], bonus: { def: 0.02, cdr: 0.02 } },
+    { id: "radiant-core", requires: ["Holy Fire", "Divine Guard"], bonus: { hp: 0.02, def: 0.015 } },
+    { id: "hunter-flow", requires: ["Sharp Aim", "Wild Reflex"], bonus: { crit: 0.01, cdr: 0.015 } },
+    { id: "oathbreaker", requires: ["Crusader", "Guardian"], bonus: { atk: 0.015, hp: 0.02 } },
+    { id: "grave-craft", requires: ["Death Coil", "Bone Armor"], bonus: { atk: 0.015, def: 0.015 } }
+  ]
+};
+
+function ensureBatch3Nodes() {
+  const addNode = (name, payload) => { if (!GameData.skillNodes[name]) GameData.skillNodes[name] = payload; };
+  const pushNode = (cls, branch, node) => { const arr = GameData.classes[cls].trees[branch]; if (!arr.includes(node)) arr.push(node); };
+  const classDefs = {
+    Warrior: [
+      ["Offense", "Warrior Edge", { stat: "atk", cost: 2 }],
+      ["Offense", "Warborn Tempo", { stat: "spd", cost: 3, prereq: "Warrior Edge" }],
+      ["Defense", "Steel Nerves", { stat: "def", cost: 2 }],
+      ["Utility", "Rallying Heart", { stat: "hp", cost: 3 }],
+      ["Utility", "Warrior Keystone", { stat: "resource", cost: 4, prereq: "Rallying Heart", keystone: true, desc: "Rage skills grant small CDR." }]
+    ],
+    Rogue: [["Offense","Rogue Edge",{stat:"atk",cost:2}],["Offense","Deadly Rhythm",{stat:"crit",cost:3,prereq:"Rogue Edge"}],["Defense","Slip Guard",{stat:"def",cost:2}],["Utility","Cutpurse Instinct",{stat:"gold",cost:3}],["Utility","Rogue Keystone",{stat:"spd",cost:4,prereq:"Cutpurse Instinct",keystone:true,desc:"Low HP enemies take bonus skill damage."}]],
+    Mage: [["Offense","Mage Spark",{stat:"atk",cost:2}],["Offense","Focused Pulse",{stat:"crit",cost:3,prereq:"Mage Spark"}],["Defense","Mana Guard",{stat:"def",cost:2}],["Utility","Arcane Reach",{stat:"resource",cost:3}],["Utility","Mage Keystone",{stat:"resource",cost:4,prereq:"Arcane Reach",keystone:true,desc:"Skills gain cooldown reduction from mana flow."}]],
+    Cleric: [["Offense","Cleric Flame",{stat:"atk",cost:2}],["Defense","Sanctified Skin",{stat:"def",cost:2}],["Defense","Blessed Vital",{stat:"hp",cost:3,prereq:"Sanctified Skin"}],["Utility","Guided Spirit",{stat:"resource",cost:3}],["Utility","Cleric Keystone",{stat:"hp",cost:4,prereq:"Guided Spirit",keystone:true,desc:"Healing effects grant brief mitigation."}]],
+    Ranger: [["Offense","Ranger Focus",{stat:"atk",cost:2}],["Offense","Predator Eye",{stat:"crit",cost:3,prereq:"Ranger Focus"}],["Defense","Barkskin",{stat:"def",cost:2}],["Utility","Trail Instinct",{stat:"spd",cost:3}],["Utility","Ranger Keystone",{stat:"crit",cost:4,prereq:"Trail Instinct",keystone:true,desc:"First shot each fight gains bonus power."}]],
+    Paladin: [["Offense","Paladin Force",{stat:"atk",cost:2}],["Defense","Light Plate",{stat:"def",cost:2}],["Defense","Zeal Ward",{stat:"hp",cost:3,prereq:"Light Plate"}],["Utility","Vowkeeper",{stat:"resource",cost:3}],["Utility","Paladin Keystone",{stat:"def",cost:4,prereq:"Vowkeeper",keystone:true,desc:"Defensive buffs also grant small CDR."}]],
+    Necromancer: [["Offense","Necro Surge",{stat:"atk",cost:2}],["Offense","Soul Precision",{stat:"crit",cost:3,prereq:"Necro Surge"}],["Defense","Bone Fort",{stat:"def",cost:2}],["Utility","Soul Reservoir",{stat:"resource",cost:3}],["Utility","Necro Keystone",{stat:"atk",cost:4,prereq:"Soul Reservoir",keystone:true,desc:"Shadow skills deal bonus vs weakened foes."}]]
+  };
+  Object.entries(classDefs).forEach(([cls, rows]) => rows.forEach(([branch, name, payload]) => { addNode(name, payload); pushNode(cls, branch, name); }));
+  Object.values(GameData.skillNodes).forEach((node) => {
+    const isKeystone = Boolean(node.keystone) || (Boolean(node.prereq) && node.cost >= 4);
+    const isMid = !isKeystone && (Boolean(node.prereq) || node.cost >= 3);
+    node.value = isKeystone ? 0.06 : (isMid ? 0.04 : 0.03);
+  });
+}
+ensureBatch3Nodes();
+
 const SAVE_VERSION = 6;
 function defaultSettings() {
   return {
@@ -314,7 +381,8 @@ function defaultSettings() {
     combatLogVerbosity: "concise",
     advancedTooltips: true,
     reducedMotion: false,
-    audioMuted: false
+    audioMuted: false,
+    worldDifficulty: "Normal"
   };
 }
 
@@ -403,7 +471,8 @@ const defaultState = (selectedClass = "Warrior") => {
     selectedSkills: getDefaultSkillLoadouts(),
     selectedFusion: [],
     selectedBreeding: [],
-    eggBattleCount: 0
+    eggBattleCount: 0,
+    dungeonModifiers: []
   };
 };
 
@@ -451,6 +520,7 @@ const ui = {
   toggleReducedMotion: document.getElementById("toggleReducedMotion"),
   toggleAudioMuted: document.getElementById("toggleAudioMuted"),
   combatLogVerbosity: document.getElementById("combatLogVerbosity"),
+  worldDifficulty: document.getElementById("worldDifficulty"),
   resetSettings: document.getElementById("resetSettings"),
   settingsTabs: document.getElementById("settingsTabs"),
   newGameClass: document.getElementById("newGameClass"),
@@ -484,12 +554,13 @@ function xpToNextLevel(level) {
 
 function levelGrowth(level) {
   const gainedLevels = Math.max(0, level - 1);
-  const earlyLevels = Math.min(gainedLevels, 39);
-  const lateLevels = Math.max(0, level - 40);
+  const early = Math.min(gainedLevels, 40);
+  const mid = Math.max(0, Math.min(gainedLevels - 40, 80));
+  const late = Math.max(0, gainedLevels - 120);
   return {
-    hp: earlyLevels * 4 + lateLevels * 3,
-    atk: earlyLevels * 0.4 + lateLevels * 0.3,
-    def: earlyLevels * 0.35 + lateLevels * 0.25,
+    hp: early * 3.2 + mid * 3.5 + late * 3.9,
+    atk: early * 0.27 + mid * 0.34 + late * 0.40,
+    def: early * 0.23 + mid * 0.30 + late * 0.36,
     crit: gainedLevels * 0.001
   };
 }
@@ -727,7 +798,8 @@ function saveState() {
       battleSummary: state.battleSummary,
       selectedFusion: state.selectedFusion,
       selectedBreeding: state.selectedBreeding,
-      eggBattleCount: state.eggBattleCount
+      eggBattleCount: state.eggBattleCount,
+      dungeonModifiers: state.dungeonModifiers
     }
   };
 
@@ -860,7 +932,8 @@ function loadState() {
         battleSummary: parsed.battleSummary,
         selectedFusion: parsed.selectedFusion,
         selectedBreeding: parsed.selectedBreeding,
-        eggBattleCount: parsed.eggBattleCount
+        eggBattleCount: parsed.eggBattleCount,
+        dungeonModifiers: parsed.dungeonModifiers
       }
     });
     localStorage.removeItem(SAVE_KEYS.legacy);
@@ -916,6 +989,7 @@ function ensureStateIntegrity() {
   state.combatTurn = Number.isFinite(state.combatTurn) ? state.combatTurn : 0;
   state.logFilter = state.logFilter || "all";
   state.logAutoScrollPaused = Boolean(state.logAutoScrollPaused);
+  state.dungeonModifiers = Array.isArray(state.dungeonModifiers) ? state.dungeonModifiers : [];
   const normalizeGearLike = (gear) => {
     if (!gear) return null;
     return {
@@ -1041,6 +1115,38 @@ function buildStatsSignature() {
   });
 }
 
+function classMasteryBonus(level = state.player.level) {
+  const out = { atk: 0, def: 0, hp: 0, cdr: 0 };
+  Object.entries(Batch3Data.classMastery).forEach(([req, bonus]) => {
+    if (level >= Number(req)) Object.keys(bonus).forEach((k) => { out[k] = (out[k] || 0) + bonus[k]; });
+  });
+  return out;
+}
+
+function activeSynergies() {
+  return Batch3Data.nodeSynergies.filter((syn) => syn.requires.every((n) => state.player.unlockedNodes.includes(n)));
+}
+
+function equippedSetCounts() {
+  return Object.values(state.equipment).filter(Boolean).reduce((acc, g) => { if (g.setId) acc[g.setId] = (acc[g.setId] || 0) + 1; return acc; }, {});
+}
+
+function setBonusStats() {
+  const counts = equippedSetCounts();
+  const out = { atk: 0, def: 0, hp: 0, crit: 0, cdr: 0, resource: 0 };
+  Object.entries(counts).forEach(([setName, count]) => {
+    const tiers = Batch3Data.gearSets[setName] || {};
+    [2,3,4].forEach((k) => {
+      if (count >= k && tiers[k]) Object.entries(tiers[k]).forEach(([stat,val]) => { out[stat]=(out[stat]||0)+val; });
+    });
+  });
+  return out;
+}
+
+function activeDungeonMods() {
+  return Array.isArray(state.dungeonModifiers) ? state.dungeonModifiers : [];
+}
+
 function baseStats() {
   const signature = buildStatsSignature();
   if (statsCache.signature === signature && statsCache.value) {
@@ -1087,6 +1193,9 @@ function baseStats() {
     hp: Math.min(rawBonus.hp || 0, nodeBonusCap("hp", state.player.level)),
     crit: Math.min(rawBonus.crit || 0, nodeBonusCap("crit", state.player.level))
   };
+  const mastery = classMasteryBonus(state.player.level);
+  const synergyBonus = activeSynergies().reduce((acc, syn) => { Object.entries(syn.bonus || {}).forEach(([k,v]) => acc[k]=(acc[k]||0)+v); return acc; }, {});
+  const setBonus = setBonusStats();
   const dragonBonus = state.inventory.dragons.reduce(
     (acc, dragon) => {
       if (dragon.bonusType) acc[dragon.bonusType] = (acc[dragon.bonusType] || 0) + dragon.value;
@@ -1094,18 +1203,19 @@ function baseStats() {
     },
     {}
   );
-  const maxHP = Math.round(effectiveClassStats.hp * (1 + (bonus.hp || 0) + (dragonBonus.hp || 0) + passives.hpBonus) + (equipmentBonus.hp || 0));
-  const atk = Math.round(effectiveClassStats.atk * (1 + (bonus.atk || 0) + (dragonBonus.atk || 0)) + (equipmentBonus.atk || 0));
-  const def = Math.round(effectiveClassStats.def * (1 + (bonus.def || 0) + (dragonBonus.def || 0)) + (equipmentBonus.def || 0));
-  const crit = effectiveClassStats.crit + (bonus.crit || 0) + ((equipmentBonus.crit || 0) / 100);
+  const maxHP = Math.round(effectiveClassStats.hp * (1 + (bonus.hp || 0) + (dragonBonus.hp || 0) + passives.hpBonus + (mastery.hp || 0) + (synergyBonus.hp || 0) + (setBonus.hp || 0)) + (equipmentBonus.hp || 0));
+  const atk = Math.round(effectiveClassStats.atk * (1 + (bonus.atk || 0) + (dragonBonus.atk || 0) + (mastery.atk || 0) + (synergyBonus.atk || 0) + (setBonus.atk || 0)) + (equipmentBonus.atk || 0));
+  const def = Math.round(effectiveClassStats.def * (1 + (bonus.def || 0) + (dragonBonus.def || 0) + (mastery.def || 0) + (synergyBonus.def || 0) + (setBonus.def || 0)) + (equipmentBonus.def || 0));
+  const crit = effectiveClassStats.crit + (bonus.crit || 0) + ((equipmentBonus.crit || 0) / 100) + (synergyBonus.crit || 0) + (setBonus.crit || 0);
   const spd = classStats.spd + (bonus.spd || 0);
   const resourceMax = Math.round(
-    GameData.classes[state.player.class].resource.max * (1 + (bonus.resource || 0) + (dragonBonus.resource || 0))
+    GameData.classes[state.player.class].resource.max * (1 + (bonus.resource || 0) + (dragonBonus.resource || 0) + (setBonus.resource || 0))
   );
+  const cooldownReduction = Math.min(0.35, (mastery.cdr || 0) + (synergyBonus.cdr || 0) + (setBonus.cdr || 0));
 
   statsCache = {
     signature,
-    value: { maxHP, atk, def, crit, spd, resourceMax }
+    value: { maxHP, atk, def, crit, spd, resourceMax, cooldownReduction }
   };
   return statsCache.value;
 }
@@ -1191,7 +1301,7 @@ function renderGearLoadoutsPanel() {
         <span class="tooltip">GearScore ${score}</span>
       </div>
       <div>
-        <button class="secondary" data-loadout-save="${slot.id}">Save Current</button>
+        <div class="tooltip">Loadout Actions</div><button class="secondary" data-loadout-save="${slot.id}">Save</button>
         <button class="secondary" data-loadout-equip="${slot.id}">Equip</button>
         <button class="secondary" data-loadout-rename="${slot.id}">Rename</button>
         <button class="secondary" data-loadout-clear="${slot.id}">Clear</button>
@@ -1233,7 +1343,7 @@ function renderCombat() {
       return `<div>${slot}: ${item.name} (${gearScore(item)}) <button class="secondary" data-unequip="${slot}">Unequip</button></div>`;
     })
     .join("");
-  const loadoutChips = (state.player.gearLoadouts?.slots || []).map((slot) => `<button class="secondary" data-loadout-equip="${slot.id}" ${slot.id===state.player.activeGearLoadoutId ? "disabled" : ""}>${slot.name}</button>`).join("");
+  const loadoutChips = (state.player.gearLoadouts?.slots || []).map((slot) => `<button class="secondary" data-loadout-equip="${slot.id}" ${slot.id===state.player.activeGearLoadoutId ? "disabled" : ""}>${slot.name}</button><button class="secondary" data-loadout-save="${slot.id}" title="Quick save current gear to ${slot.name}">Save</button>`).join("");
   const pStatuses = (player.statuses || []).map((st) => `<span class="status-pill">${st.id} (${st.duration})</span>`).join("") || '<span class="status-pill">No Status</span>';
   ui.playerPanel.innerHTML = `
     <div><strong>Player</strong></div>
@@ -1241,11 +1351,13 @@ function renderCombat() {
       <div class="resource hp"><div class="fill" style="width:${Math.max(0, player.currentHP / player.maxHP) * 100}%"></div><span>${formatNumber(player.currentHP)}/${formatNumber(player.maxHP)} HP</span></div>
       <div class="resource res"><div class="fill" style="width:${Math.max(0, player.resource / player.resourceMax) * 100}%"></div><span>${playerResourceLabel()} ${formatNumber(player.resource)}/${formatNumber(player.resourceMax)}</span></div>
     </div>
-    <div>ATK ${formatNumber(baseStats().atk)} | DEF ${formatNumber(baseStats().def)} | CRIT ${formatNumber(baseStats().crit * 100)}% | SPD ${formatNumber(baseStats().spd)}</div>
+    <div>ATK ${formatNumber(baseStats().atk)} | DEF ${formatNumber(baseStats().def)} | CRIT ${formatNumber(baseStats().crit * 100)}% | SPD ${formatNumber(baseStats().spd)} | CDR ${Math.round((baseStats().cooldownReduction || 0) * 100)}%</div>
     <div class="status-row">${pStatuses}</div>
     <details><summary>Details</summary>
       <div class="tooltip">Loadouts: ${loadoutChips} <button class="secondary" data-tab="inventory">Manage</button></div>
       <div class="tooltip">Gear Score Cap: ${Number.isFinite(gearScoreCap()) ? gearScoreCap() : "∞"} | Equipped: ${formatNumber(equippedGearScoreTotal())}</div>
+      <div>Masteries: ${Object.keys(Batch3Data.classMastery).filter((lvl) => state.player.level >= Number(lvl)).join(", ") || "None"}</div>
+      <div>Dungeon Mods: ${(activeDungeonMods().map((m) => m.name).join(", ") || "None")}</div>
       <div>${equippedRows}</div>
     </details>
   `;
@@ -1253,9 +1365,9 @@ function renderCombat() {
     const hpPercent = Math.max(0, state.enemy.hp / state.enemy.maxHP) * 100;
     const eStatuses = (state.enemy.statuses || []).map((st) => `<span class="status-pill">${st.id} (${st.duration})</span>`).join("") || '<span class="status-pill">No Status</span>';
     ui.enemyPanel.innerHTML = `
-      <div><strong>${state.enemy.name}</strong></div>
+      <div><strong>${state.enemy.name}${state.enemy.isElite ? " ★Elite" : ""}</strong></div>
       <div class="bars"><div class="resource hp"><div class="fill" style="width:${hpPercent}%"></div><span>${formatNumber(state.enemy.hp)}/${formatNumber(state.enemy.maxHP)} HP</span></div></div>
-      <div>ATK ${formatNumber(state.enemy.atk)} | DEF ${formatNumber(state.enemy.def)} | Phase ${state.enemy.phase || 1}</div>
+      <div>ATK ${formatNumber(state.enemy.atk)} | DEF ${formatNumber(state.enemy.def)} | Phase ${state.enemy.phase || 1}</div><div class="tooltip">Affixes: ${(state.enemy.affixes || []).join(", ") || "None"}</div>
       <div class="status-row">${eStatuses}</div>
       <details><summary>Details</summary>
         <div class="tooltip">Traits: ${(state.enemy.traits || []).join(", ") || "None"}</div>
@@ -1388,9 +1500,11 @@ function renderInventory() {
   renderGearLoadoutsPanel();
   const equippedRows = ["weapon", "armor", "helmet", "boots", "accessory"].map((slot) => {
     const item = state.equipment[slot];
-    return `<div class="inventory-item"><div class="meta"><strong>${slot}</strong><span class="tooltip">${item ? `${item.name} • GearScore ${gearScore(item)}` : "Empty"}</span></div></div>`;
+    return `<div class="inventory-item"><div class="meta"><strong>${slot}</strong><span class="tooltip">${item ? `${item.name} • GearScore ${gearScore(item)}${item.setId ? ` • Set ${item.setId}` : ""}` : "Empty"}</span></div></div>`;
   }).join("");
-  if (ui.equippedSummary) ui.equippedSummary.innerHTML = equippedRows;
+  const setCounts = equippedSetCounts();
+  const setProgress = Object.keys(Batch3Data.gearSets).map((name) => `${name} ${setCounts[name] || 0}/4`).join(" • ");
+  if (ui.equippedSummary) ui.equippedSummary.innerHTML = `<div class="tooltip">Set Progress: ${setProgress}</div>${equippedRows}`;
   const healState = outOfCombatPotionState();
   if (ui.inventoryActions) {
     ui.inventoryActions.innerHTML = `<div class="inventory-item"><div class="meta"><strong>Consumables</strong><span class="tooltip">Use healing potion outside combat.</span></div><div class="inventory-actions"><button class="secondary" data-action="heal-oot" ${healState.disabled ? "disabled" : ""} title="${healState.reason}">Use Potion</button></div></div>`;
@@ -1499,8 +1613,8 @@ function renderSkillTree() {
       const options = available
         .map((node) => {
           const data = GameData.skillNodes[node];
-          return `<div class="skill-node">
-            <strong>${node}</strong>
+          const nodeClass = data.keystone ? " keystone-node" : ""; return `<div class="skill-node${nodeClass}">
+            <strong>${node}${data.keystone ? " ★" : ""}</strong>
             <div>${data.stat.toUpperCase()} +${formatNumber(data.value * 100)}%</div>
             <div>Cost: ${data.cost} points</div>
             <button class="secondary" data-skillnode="${node}">Learn</button>
@@ -1682,6 +1796,7 @@ function renderSettings() {
   ui.toggleReducedMotion.checked = state.player.settings.reducedMotion;
   ui.toggleAudioMuted.checked = state.player.settings.audioMuted;
   ui.combatLogVerbosity.value = state.player.settings.combatLogVerbosity;
+  if (ui.worldDifficulty) ui.worldDifficulty.value = state.player.settings.worldDifficulty;
   switchSettingsTab(document.querySelector("[data-settings-panel]:not([hidden])")?.dataset.settingsPanel || "gameplay");
 }
 
@@ -1817,12 +1932,13 @@ function startCombat(type, isGate = false, zoneOverride = null) {
   const templateKey = isGate ? "gate" : type;
   const template = GameData.enemyTemplates[templateKey];
   const enemyLevel = zone.level;
+  const diff = Batch3Data.difficulty[state.player.settings.worldDifficulty || "Normal"] || Batch3Data.difficulty.Normal;
   const enemy = {
     name: isGate ? zone.gateBoss : template.name,
-    hp: Math.round(template.hp + enemyLevel * 2),
-    maxHP: Math.round(template.hp + enemyLevel * 2),
-    atk: Math.round(template.atk + enemyLevel * 0.5),
-    def: Math.round(template.def + enemyLevel * 0.3),
+    hp: Math.round((template.hp + enemyLevel * 2) * diff.enemy),
+    maxHP: Math.round((template.hp + enemyLevel * 2) * diff.enemy),
+    atk: Math.round((template.atk + enemyLevel * 0.5) * diff.enemy),
+    def: Math.round((template.def + enemyLevel * 0.3) * diff.enemy),
     type,
     zoneId: zone.id,
     traits: template.traits || [],
@@ -1833,12 +1949,27 @@ function startCombat(type, isGate = false, zoneOverride = null) {
     phaseProfiles: [template.profile || "neutral", "armored", "elemental"],
     phasePassivePotency: [0, 4, 7],
     firstSkillUsed: false,
-    resistances: { ...(GameData.resistanceProfiles[template.profile] || {}) }
+    resistances: { ...(GameData.resistanceProfiles[template.profile] || {}) },
+    isElite: false,
+    affixes: []
   };
+  if (!isGate && ["hunt","adventure","dungeon","miniboss"].includes(type) && zone.id >= 3 && Math.random() < 0.22) {
+    enemy.isElite = true;
+    const names = Object.keys(Batch3Data.eliteAffixes);
+    const aff = names[Math.floor(Math.random()*names.length)];
+    const defAff = Batch3Data.eliteAffixes[aff];
+    enemy.affixes = [aff];
+    enemy.hp = Math.round(enemy.hp * 1.18 * defAff.hp);
+    enemy.maxHP = Math.round(enemy.maxHP * 1.18 * defAff.hp);
+    enemy.atk = Math.round(enemy.atk * 1.1 * defAff.atk);
+    enemy.def = Math.round(enemy.def * 1.1 * defAff.def);
+    logMessage(`Elite enemy spawned: ${aff} (${defAff.note})`, "combat");
+  }
   state.enemy = enemy;
   state.player.inCombat = true;
   state.combatTurn = 1;
   if (["boss", "dungeon"].includes(type)) {
+    if (type === "dungeon" && activeDungeonMods().length) logMessage(`Dungeon Modifiers: ${activeDungeonMods().map((m) => m.name).join(", ")}`, "system", null);
     logMessage(`Prepared Bonuses: ${preparedBonusesSummary()}`);
     state.player.preparedBuffs = activePreparedBuffs().map((buff) => ({ ...buff, remainingBattles: Math.max(0, buff.remainingBattles - 1) }));
   }
@@ -1970,6 +2101,9 @@ function resolveDamagePipeline({ attacker, defender, attackValue, tags, critChan
   const crit = Math.random() < critChance;
   const critMult = crit ? 1.5 : 1;
   let final = Math.max(1, Math.round(baseDamage * traitTag.multiplier * buffDebuffMult * critMult));
+  const dungeonModMap = activeDungeonMods().reduce((acc,m)=>({ ...acc, ...m }), {});
+  if (attacker === state.player) final = Math.round(final * (dungeonModMap.playerDmgDealt || 1));
+  if (defender === state.player) final = Math.round(final * (dungeonModMap.playerDmgTaken || 1));
   if (attacker === state.player && (defender.traits || []).includes("Boss")) {
     const gemEffects = gemTypeEffects();
     final = Math.round(final * (1 + lifeSkillPassives().bossDmg + gemEffects.bossDmg));
@@ -2133,7 +2267,8 @@ function performPlayerAction(action, skillName) {
     }
     state.player.resource -= skill.cost;
     state.battleSummary = applySkill(skillName, skill);
-    state.player.cooldowns[`skill-${skillName}`] = now + skill.cooldown * 1000;
+    const cdr = Math.min(0.35, baseStats().cooldownReduction || 0);
+    state.player.cooldowns[`skill-${skillName}`] = now + skill.cooldown * 1000 * (1 - cdr);
   }
 
   checkBossPhaseChange();
@@ -2272,7 +2407,7 @@ function enemyTurn() {
   const regenBoost = lifeSkillPassives().resourceRegenBonus + gemTypeEffects().resourceRegen;
   state.player.resource = Math.min(
     state.player.resourceMax,
-    state.player.resource + Math.round(GameData.classes[state.player.class].resource.regen * (1 + regenBoost))
+    state.player.resource + Math.round(GameData.classes[state.player.class].resource.regen * (1 + regenBoost) * (activeDungeonMods().reduce((a,m)=>a*(m.resourceRegenMult||1),1)))
   );
   if (state.player.currentHP <= 0) {
     handleDeath();
@@ -2289,8 +2424,10 @@ function handleVictory() {
   const enemy = state.enemy;
   state.player.inCombat = false;
   state.enemy = null;
-  const xpReward = GameData.xp.rewards[enemy.type] || 0;
-  const loot = rollLoot(enemy.zoneId);
+  const diff = Batch3Data.difficulty[state.player.settings.worldDifficulty || "Normal"] || Batch3Data.difficulty.Normal;
+  const eliteMult = enemy.isElite ? 1.12 : 1;
+  const xpReward = Math.round((GameData.xp.rewards[enemy.type] || 0) * diff.rewards * eliteMult);
+  const loot = rollLoot(enemy.zoneId, diff.rewards * eliteMult);
   gainXp(xpReward);
   state.player.gold += loot.gold;
   const lifebloomHeal = gemTypeEffects().healOnKill > 0 ? Math.round(state.player.maxHP * Math.min(0.25, gemTypeEffects().healOnKill)) : 0;
@@ -2307,6 +2444,7 @@ function handleVictory() {
     if (state.player.dungeonProgress >= 5) {
       state.player.inDungeonRun = false;
       state.player.dungeonProgress = 0;
+      state.dungeonModifiers = [];
       logMessage("Dungeon cleared!", "rewards");
     } else {
       startCombat("dungeon");
@@ -2343,9 +2481,9 @@ function gainXp(amount) {
   }
 }
 
-function rollLoot(zoneId = state.player.currentZone) {
+function rollLoot(zoneId = state.player.currentZone, rewardMult = 1) {
   const zone = GameData.zones.find((entry) => entry.id === zoneId);
-  const gold = Math.round((20 + zone.level * 1.5) * (1 + getBonus("gold")));
+  const gold = Math.round((20 + zone.level * 1.5) * (1 + getBonus("gold")) * rewardMult);
   const gearDrop = Math.random() < 0.55;
   if (gearDrop) {
     const gear = generateGear(zone.id);
@@ -2413,7 +2551,8 @@ function generateGear(zoneId) {
     stats: rolled.stats,
     gearScore: rolled.score,
     gems: [],
-    locked: false
+    locked: false,
+    setId: zoneId >= 3 ? ["Vanguard","Striker","Mystic"][Math.floor(Math.random()*3)] : null
   };
 }
 
@@ -2517,7 +2656,9 @@ function handleAutoBattle() {
       hp: template.hp,
       phaseThresholds: [0.7, 0.35],
       traits: template.traits || [],
-      resistances: { ...(GameData.resistanceProfiles[template.profile] || {}) }
+      resistances: { ...(GameData.resistanceProfiles[template.profile] || {}) },
+    isElite: false,
+    affixes: []
     };
 
     const underDot = (state.player.statuses || []).some((status) => status.type === "dot");
@@ -2793,6 +2934,9 @@ function handleDungeonStart() {
   if (state.player.inDungeonRun) return;
   state.player.inDungeonRun = true;
   state.player.dungeonProgress = 0;
+  const pool = [...Batch3Data.dungeonMods].sort(() => Math.random() - 0.5);
+  const count = 1 + Math.floor(Math.random() * 3);
+  state.dungeonModifiers = pool.slice(0, count);
   startCombat("dungeon");
 }
 
@@ -2801,6 +2945,7 @@ function exitDungeon() {
   state.player.dungeonProgress = 0;
   state.enemy = null;
   state.player.inCombat = false;
+  state.dungeonModifiers = [];
   logMessage("Exited dungeon.");
   updateAll();
 }
@@ -2961,6 +3106,7 @@ function handleSettingsChange() {
   state.player.settings.reducedMotion = ui.toggleReducedMotion.checked;
   state.player.settings.audioMuted = ui.toggleAudioMuted.checked;
   state.player.settings.combatLogVerbosity = ui.combatLogVerbosity.value;
+  if (ui.worldDifficulty) state.player.settings.worldDifficulty = ui.worldDifficulty.value;
   updateAll();
 }
 
@@ -3010,7 +3156,8 @@ function createBackupSnapshot() {
       battleSummary: state.battleSummary,
       selectedFusion: state.selectedFusion,
       selectedBreeding: state.selectedBreeding,
-      eggBattleCount: state.eggBattleCount
+      eggBattleCount: state.eggBattleCount,
+      dungeonModifiers: state.dungeonModifiers
     }
   };
   localStorage.setItem(SAVE_KEYS.backup, JSON.stringify(backup));
@@ -3053,7 +3200,8 @@ function importSave() {
         battleSummary: parsed.battleSummary,
         selectedFusion: parsed.selectedFusion,
         selectedBreeding: parsed.selectedBreeding,
-        eggBattleCount: parsed.eggBattleCount
+        eggBattleCount: parsed.eggBattleCount,
+        dungeonModifiers: parsed.dungeonModifiers
       }
     };
     const merged = buildStateFromBundle(bundle);
@@ -3363,6 +3511,7 @@ function setupEventListeners() {
   ui.toggleReducedMotion.addEventListener("change", handleSettingsChange);
   ui.toggleAudioMuted.addEventListener("change", handleSettingsChange);
   ui.combatLogVerbosity.addEventListener("change", handleSettingsChange);
+  if (ui.worldDifficulty) ui.worldDifficulty.addEventListener("change", handleSettingsChange);
   if (ui.settingsTabs) ui.settingsTabs.addEventListener("click", (event) => {
     const btn = event.target.closest("button[data-settings-tab]");
     if (!btn) return;
