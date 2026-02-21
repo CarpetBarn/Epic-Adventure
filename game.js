@@ -472,7 +472,11 @@ const defaultState = (selectedClass = "Warrior") => {
     selectedFusion: [],
     selectedBreeding: [],
     eggBattleCount: 0,
-    dungeonModifiers: []
+    dungeonModifiers: [],
+    lastPlayerSkill: null,
+    lastPlayerTags: [],
+    comboWindow: [],
+    avoidedDamageLastTurn: false
   };
 };
 
@@ -990,6 +994,10 @@ function ensureStateIntegrity() {
   state.logFilter = state.logFilter || "all";
   state.logAutoScrollPaused = Boolean(state.logAutoScrollPaused);
   state.dungeonModifiers = Array.isArray(state.dungeonModifiers) ? state.dungeonModifiers : [];
+  state.lastPlayerSkill = state.lastPlayerSkill || null;
+  state.lastPlayerTags = Array.isArray(state.lastPlayerTags) ? state.lastPlayerTags : [];
+  state.comboWindow = Array.isArray(state.comboWindow) ? state.comboWindow : [];
+  state.avoidedDamageLastTurn = Boolean(state.avoidedDamageLastTurn);
   const normalizeGearLike = (gear) => {
     if (!gear) return null;
     return {
@@ -1333,6 +1341,79 @@ Traits: ${(enemy.traits || []).join(', ') || 'None'} | Resists: ${formatResistan
 Enemy Statuses: ${enemyStatuses}`;
 }
 
+function chooseEnemyIntent(enemy = state.enemy) {
+  if (!enemy) return null;
+  const hpPct = state.player.currentHP / Math.max(1, state.player.maxHP);
+  const pDebuffed = (state.player.statuses || []).some((st) => ["dmg-in", "def-down", "dot"].includes(st.type));
+  const profile = enemy.aiProfile || "Aggressive";
+  const phase = enemy.phase || 1;
+  let type = "attack";
+  if (profile === "Defensive") {
+    if ((enemy.hp / Math.max(1, enemy.maxHP)) < 0.45 || phase >= 2) type = "buff";
+    else if (!pDebuffed && Math.random() < 0.45) type = "debuff";
+  } else if (profile === "Opportunist") {
+    if (hpPct < 0.4) type = "big";
+    else if (!pDebuffed && state.lastPlayerSkill && Math.random() < 0.4) type = "debuff";
+  } else {
+    if (hpPct < 0.35 || phase >= 3) type = "big";
+    else if (!pDebuffed && Math.random() < 0.25) type = "debuff";
+  }
+  return { type, label: type === "big" ? "Big Move" : type[0].toUpperCase() + type.slice(1) };
+}
+
+function comboTriggerFor(tags = []) {
+  const last = state.comboWindow[state.comboWindow.length - 1] || null;
+  const current = tags[0] || null;
+  if (!last || !current) return null;
+  if (last === "ice" && current === "fire") return { id: "thermal-shock", label: "Thermal Shock", bonus: 0.12 };
+  if (last === "shadow" && current === "holy") return { id: "purge-burst", label: "Purge Burst", bonus: 0.10 };
+  return null;
+}
+
+function tacticalSkillBonus(skillName, tags = []) {
+  let mult = 1;
+  const notes = [];
+  if ((state.enemy?.statuses || []).some((st) => ["def-down", "dmg-in", "dot"].includes(st.type))) {
+    mult *= 1.08;
+    notes.push("Exploited Debuff");
+  }
+  const hpPct = state.enemy ? state.enemy.hp / Math.max(1, state.enemy.maxHP) : 1;
+  if (hpPct > 0.75) {
+    mult *= 1.06;
+    notes.push("Opening Strike");
+  }
+  if (hpPct < 0.35) {
+    mult *= 1.08;
+    notes.push("Execution Window");
+  }
+  if (state.avoidedDamageLastTurn) {
+    mult *= 1.06;
+    notes.push("Momentum");
+  }
+  const combo = comboTriggerFor(tags);
+  if (combo) {
+    mult *= 1 + combo.bonus;
+    notes.push(combo.label);
+    logMessage(`Combo activated: ${combo.label}.`, "combat");
+  }
+  if (notes.length) logMessage(`${skillName} bonus: ${notes.join(" • ")}.`, "combat");
+  return Math.min(1.35, mult);
+}
+
+function trackBossReaction(skillTags = []) {
+  const enemy = state.enemy;
+  if (!enemy || !(enemy.traits || []).includes("Boss")) return;
+  const tag = skillTags[0] || "physical";
+  enemy.reactionTrack = enemy.reactionTrack || { tag: null, count: 0 };
+  if (enemy.reactionTrack.tag === tag) enemy.reactionTrack.count += 1;
+  else enemy.reactionTrack = { tag, count: 1 };
+  if (enemy.reactionTrack.count >= 3) {
+    enemy.resistances[tag] = Math.min(1.35, (enemy.resistances[tag] || 1) * 1.15);
+    enemy.reactionTrack.count = 0;
+    logMessage(`${enemy.name} adapts to repeated ${tag} skills and gains temporary resistance!`, "combat");
+  }
+}
+
 function renderCombat() {
   refreshStats();
   const player = state.player;
@@ -1344,7 +1425,7 @@ function renderCombat() {
     })
     .join("");
   const loadoutChips = (state.player.gearLoadouts?.slots || []).map((slot) => `<button class="secondary" data-loadout-equip="${slot.id}" ${slot.id===state.player.activeGearLoadoutId ? "disabled" : ""}>${slot.name}</button><button class="secondary" data-loadout-save="${slot.id}" title="Quick save current gear to ${slot.name}">Save</button>`).join("");
-  const pStatuses = (player.statuses || []).map((st) => `<span class="status-pill">${st.id} (${st.duration})</span>`).join("") || '<span class="status-pill">No Status</span>';
+  const pStatuses = (player.statuses || []).map((st) => `<span class="status-pill">${st.id} x${st.stacks || 1} (${st.duration})</span>`).join("") || '<span class="status-pill">No Status</span>';
   ui.playerPanel.innerHTML = `
     <div><strong>Player</strong></div>
     <div class="bars">
@@ -1363,11 +1444,11 @@ function renderCombat() {
   `;
   if (state.enemy) {
     const hpPercent = Math.max(0, state.enemy.hp / state.enemy.maxHP) * 100;
-    const eStatuses = (state.enemy.statuses || []).map((st) => `<span class="status-pill">${st.id} (${st.duration})</span>`).join("") || '<span class="status-pill">No Status</span>';
+    const eStatuses = (state.enemy.statuses || []).map((st) => `<span class="status-pill">${st.id} x${st.stacks || 1} (${st.duration})</span>`).join("") || '<span class="status-pill">No Status</span>';
     ui.enemyPanel.innerHTML = `
       <div><strong>${state.enemy.name}${state.enemy.isElite ? " ★Elite" : ""}</strong></div>
       <div class="bars"><div class="resource hp"><div class="fill" style="width:${hpPercent}%"></div><span>${formatNumber(state.enemy.hp)}/${formatNumber(state.enemy.maxHP)} HP</span></div></div>
-      <div>ATK ${formatNumber(state.enemy.atk)} | DEF ${formatNumber(state.enemy.def)} | Phase ${state.enemy.phase || 1}</div><div class="tooltip">Affixes: ${(state.enemy.affixes || []).join(", ") || "None"}</div>
+      <div>ATK ${formatNumber(state.enemy.atk)} | DEF ${formatNumber(state.enemy.def)} | Phase ${state.enemy.phase || 1}</div><div class="tooltip"><strong>Intent:</strong> ${state.enemy.intent?.label || "Unknown"}</div><div class="tooltip">Affixes: ${(state.enemy.affixes || []).join(", ") || "None"}</div>
       <div class="status-row">${eStatuses}</div>
       <details><summary>Details</summary>
         <div class="tooltip">Traits: ${(state.enemy.traits || []).join(", ") || "None"}</div>
@@ -1404,7 +1485,8 @@ function renderCombatButtons() {
   const actions = [
     { id: "attack", label: "Attack" },
     { id: "heal", label: "Heal" },
-    { id: "auto", label: "Auto Battle" }
+    { id: "auto", label: "Auto Battle" },
+    { id: "brace", label: "Brace" }
   ];
 
   const reasonForAction = (action, skill) => {
@@ -1414,6 +1496,10 @@ function renderCombatButtons() {
       if (state.player.resource < GameData.skills[skill].cost) return "Not enough resource.";
       if (cooldown > 0) return `Cooldown ${Math.ceil(cooldown)}s remaining.`;
       return "";
+    }
+    if (action?.id === "brace") {
+      if (!state.player.inCombat) return "Start combat first.";
+      return "Brace: reduce next incoming damage and gain resource.";
     }
     if (action.id === "auto") {
       const cdr = cooldownRemaining("auto");
@@ -1437,7 +1523,10 @@ function renderCombatButtons() {
     const disabled = Boolean(reason);
     const tagLabel = (GameData.skills[skill].tags || ["physical"]).join("/");
     const cooldown = cooldownRemaining(`skill-${skill}`);
-    return `<button class="action" data-skill="${skill}" ${disabled ? "disabled" : ""} title="${reason || `Tags: ${tagLabel}`}">${skill} ${cooldown > 0 ? `(${Math.ceil(cooldown)}s)` : ""}</button>`;
+    const cdrPct = Math.round((baseStats().cooldownReduction || 0) * 100);
+    const baseCd = GameData.skills[skill].cooldown;
+    const effCd = Math.max(1, Math.round(baseCd * (1 - (baseStats().cooldownReduction || 0))));
+    return `<button class="action" data-skill="${skill}" ${disabled ? "disabled" : ""} title="${reason || `Tags: ${tagLabel} • CD ${effCd}s (base ${baseCd}s, CDR ${cdrPct}%)`}">${skill} ${cooldown > 0 ? `(${Math.ceil(cooldown)}s)` : `(CD ${effCd}s)`}</button>`;
   });
 
   const loopButtons = state.player.inCombat
@@ -1951,7 +2040,10 @@ function startCombat(type, isGate = false, zoneOverride = null) {
     firstSkillUsed: false,
     resistances: { ...(GameData.resistanceProfiles[template.profile] || {}) },
     isElite: false,
-    affixes: []
+    affixes: [],
+    aiProfile: ["Aggressive", "Defensive", "Opportunist"][Math.floor(Math.random() * 3)],
+    intent: null,
+    reactionTrack: { tag: null, count: 0 }
   };
   if (!isGate && ["hunt","adventure","dungeon","miniboss"].includes(type) && zone.id >= 3 && Math.random() < 0.22) {
     enemy.isElite = true;
@@ -1965,6 +2057,7 @@ function startCombat(type, isGate = false, zoneOverride = null) {
     enemy.def = Math.round(enemy.def * 1.1 * defAff.def);
     logMessage(`Elite enemy spawned: ${aff} (${defAff.note})`, "combat");
   }
+  enemy.intent = chooseEnemyIntent(enemy);
   state.enemy = enemy;
   state.player.inCombat = true;
   state.combatTurn = 1;
@@ -1999,9 +2092,11 @@ function addStatus(target, status) {
   }
   const existing = target.statuses.find((entry) => entry.id === payload.id && entry.source === payload.source);
   if (existing) {
-    existing.stacks += payload.stacks;
+    const nextStacks = Math.min(5, existing.stacks + payload.stacks);
+    const diminishing = nextStacks > 3 ? 0.85 : 1;
+    existing.stacks = nextStacks;
     existing.duration = Math.max(existing.duration, payload.duration);
-    existing.potency = Math.max(existing.potency, payload.potency);
+    existing.potency = Math.max(existing.potency, payload.potency * diminishing);
   } else {
     target.statuses.push(payload);
   }
@@ -2144,8 +2239,10 @@ function checkBossPhaseChange() {
       target: "player",
       skipNextTick: true
     });
+    enemy.reactionTrack = { tag: null, count: 0 };
     logMessage(`${enemy.name} shifts to Phase ${enemy.phase}!`);
   }
+  enemy.intent = chooseEnemyIntent(enemy);
   return true;
 }
 
@@ -2194,11 +2291,13 @@ function applyConsumableEffect(itemId) {
     state.player.currentHP = Math.min(state.player.maxHP, state.player.currentHP + healAmount);
     state.battleSummary = `${def.name}: +${formatNumber(healAmount)} HP`;
     logMessage(state.battleSummary);
+    if (state.enemy) state.enemy.intent = chooseEnemyIntent(state.enemy);
     return true;
   }
   if (def.purge) {
     state.player.statuses = (state.player.statuses || []).filter((status) => !["dmg-in", "def-down", "dot"].includes(status.type));
     logMessage("Purge removed all debuffs.");
+    if (state.enemy) state.enemy.intent = chooseEnemyIntent(state.enemy);
     return true;
   }
   if (def.status) {
@@ -2206,6 +2305,7 @@ function applyConsumableEffect(itemId) {
     if (statusDef.target === "enemy") addStatus(state.enemy, statusDef);
     else addStatus(state.player, statusDef);
     logMessage(`${def.name} applied.`);
+    if (state.enemy) state.enemy.intent = chooseEnemyIntent(state.enemy);
     return true;
   }
   if (def.meal) {
@@ -2215,6 +2315,7 @@ function applyConsumableEffect(itemId) {
     buffs.push({ id: def.id, stat: def.meal.stat, value: def.meal.value, remainingBattles: mealDurationBattles() });
     state.player.preparedBuffs = buffs;
     logMessage(`${def.name} prepared (${mealDurationBattles()} battles).`);
+    if (state.enemy) state.enemy.intent = chooseEnemyIntent(state.enemy);
     return true;
   }
   return false;
@@ -2254,6 +2355,19 @@ function performPlayerAction(action, skillName) {
     }
     applyConsumableEffect("potion");
   }
+  if (action === "brace") {
+    addStatus(state.player, {
+      id: "brace",
+      source: "brace",
+      duration: 1,
+      stacks: 1,
+      potency: -0.35,
+      tickTiming: "start",
+      type: "dmg-in"
+    });
+    state.player.resource = Math.min(state.player.resourceMax, state.player.resource + 8);
+    logMessage("You brace for impact.", "combat");
+  }
   if (action === "skill" && skillName) {
     const skill = GameData.skills[skillName];
     if (state.player.resource < skill.cost) {
@@ -2266,6 +2380,10 @@ function performPlayerAction(action, skillName) {
       return;
     }
     state.player.resource -= skill.cost;
+    state.lastPlayerSkill = skillName;
+    state.lastPlayerTags = skill.tags || ["physical"];
+    state.comboWindow.push(state.lastPlayerTags[0]);
+    if (state.comboWindow.length > 3) state.comboWindow.shift();
     state.battleSummary = applySkill(skillName, skill);
     const cdr = Math.min(0.35, baseStats().cooldownReduction || 0);
     state.player.cooldowns[`skill-${skillName}`] = now + skill.cooldown * 1000 * (1 - cdr);
@@ -2283,10 +2401,11 @@ function applySkill(name, skill) {
   const stats = baseStats();
   const skillTags = skill.tags || ["physical"];
   const firstSkillBonus = (!state.enemy.firstSkillUsed ? gemTypeEffects().firstSkillBonus : 0);
+  const tacticalMult = tacticalSkillBonus(name, skillTags);
   const applyDamage = (scale) => resolveDamagePipeline({
     attacker: state.player,
     defender: state.enemy,
-    attackValue: Math.max(1, stats.atk * scale * (1 + firstSkillBonus)),
+    attackValue: Math.max(1, stats.atk * scale * (1 + firstSkillBonus) * tacticalMult),
     tags: skillTags,
     critChance: stats.crit
   });
@@ -2296,6 +2415,7 @@ function applySkill(name, skill) {
     state.enemy.firstSkillUsed = true;
     state.enemy.hp -= resolved.damage;
     if (skill.effect.secondary) applySecondary(skill.effect.secondary);
+    trackBossReaction(skillTags);
     summarizeTurn("You", name, resolved);
     return state.battleSummary;
   }
@@ -2310,6 +2430,7 @@ function applySkill(name, skill) {
       state.enemy.hp -= resolved.damage;
       if (state.enemy.hp <= 0) break;
     }
+    trackBossReaction(skillTags);
     summarizeTurn("You", `${name} x${skill.effect.hits}`, { damage: total, labels: [...new Set(labels)] });
     return state.battleSummary;
   }
@@ -2395,24 +2516,38 @@ function enemyTurn() {
     return;
   }
 
-  const resolved = resolveDamagePipeline({
-    attacker: state.enemy,
-    defender: state.player,
-    attackValue: state.enemy.atk,
-    tags: ["physical"],
-    critChance: 0.08
-  });
-  state.player.currentHP -= resolved.damage;
-  summarizeTurn(state.enemy.name, "Attack", resolved);
+  state.enemy.intent = state.enemy.intent || chooseEnemyIntent(state.enemy);
+  logMessage(`${state.enemy.name} intends to ${state.enemy.intent.label}.`, "combat");
+
+  if (state.enemy.intent.type === "buff") {
+    addStatus(state.enemy, { id: "guarded", source: "enemy-ai", duration: 1, stacks: 1, potency: -0.12, tickTiming: "start", type: "dmg-in" });
+    logMessage(`${state.enemy.name} fortifies.`, "combat");
+  } else if (state.enemy.intent.type === "debuff") {
+    addStatus(state.player, { id: "shaken", source: "enemy-ai", duration: 1, stacks: 1, potency: 0.10, tickTiming: "start", type: "dmg-in" });
+    logMessage(`${state.enemy.name} applies pressure.`, "combat");
+  } else {
+    const resolved = resolveDamagePipeline({
+      attacker: state.enemy,
+      defender: state.player,
+      attackValue: state.enemy.atk * (state.enemy.intent.type === "big" ? 1.25 : 1),
+      tags: ["physical"],
+      critChance: state.enemy.intent.type === "big" ? 0.12 : 0.08
+    });
+    state.player.currentHP -= resolved.damage;
+    summarizeTurn(state.enemy.name, state.enemy.intent.type === "big" ? "Big Move" : "Attack", resolved);
+  }
+
   const regenBoost = lifeSkillPassives().resourceRegenBonus + gemTypeEffects().resourceRegen;
   state.player.resource = Math.min(
     state.player.resourceMax,
     state.player.resource + Math.round(GameData.classes[state.player.class].resource.regen * (1 + regenBoost) * (activeDungeonMods().reduce((a,m)=>a*(m.resourceRegenMult||1),1)))
   );
+  state.avoidedDamageLastTurn = state.enemy.intent.type === "buff" || state.enemy.intent.type === "debuff";
   if (state.player.currentHP <= 0) {
     handleDeath();
   }
   state.combatTurn += 1;
+  state.enemy.intent = chooseEnemyIntent(state.enemy);
   updateAll();
 }
 
@@ -2658,7 +2793,10 @@ function handleAutoBattle() {
       traits: template.traits || [],
       resistances: { ...(GameData.resistanceProfiles[template.profile] || {}) },
     isElite: false,
-    affixes: []
+    affixes: [],
+    aiProfile: ["Aggressive", "Defensive", "Opportunist"][Math.floor(Math.random() * 3)],
+    intent: null,
+    reactionTrack: { tag: null, count: 0 }
     };
 
     const underDot = (state.player.statuses || []).some((status) => status.type === "dot");
