@@ -1,0 +1,10 @@
+{
+  "name": "Epic Adventure RPG",
+  "short_name": "Epic RPG",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0f1117",
+  "theme_color": "#12141d",
+  "description": "Single-page Epic RPG style browser game",
+  "icons": []
+}
